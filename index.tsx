@@ -34,7 +34,8 @@ const IMG = {
   DIGEST: E.IMG_DIGEST || "https://i.postimg.cc/XJbB6Dnw/Chat-GPT-Image-12-5-2026-22-29-05.png",
 };
 
-const TG_API_ID = Number(E.TG_API_ID || 0), TG_API_HASH = E.TG_API_HASH || "";
+const TG_API_ID = Number(String(E.TG_API_ID || 0).trim()), TG_API_HASH = String(E.TG_API_HASH || "").trim().replace(/^["']|["']$/g, "");
+const TG_HASH_LOOKS_OK = /^[0-9a-f]{32}$/i.test(TG_API_HASH); // shown in status without revealing the hash
 const TG_SOURCES = (E.TG_SOURCES || "").split(",").map((x) => x.trim().replace(/^@|^https?:\/\/t\.me\//g, "").toLowerCase()).filter(Boolean);
 const xEnabled = X_MODE !== "off" && !!(X_KEY && X_SECRET && X_TOKEN && X_TOKEN_SECRET);
 const log = (...a: any[]) => console.log(new Date().toISOString(), ...a);
@@ -1083,7 +1084,7 @@ function server() {
       }
       if (u.pathname === "/") {
         const lat = stats.lastLatencies;
-        return Response.json({ ...stats, feed: feedStat, avgLatencySec: lat.length ? Math.round(lat.reduce((a, b) => a + b, 0) / lat.length) : null, xEnabled, telegramSources: userbot, xMode: X_MODE, xPostsLeftToday: xBudgetLeft(), dryRun: DRY_RUN, claude: !!ANTHROPIC_KEY, telegram: !!TG_TOKEN, db: !!db });
+        return Response.json({ ...stats, feed: feedStat, avgLatencySec: lat.length ? Math.round(lat.reduce((a, b) => a + b, 0) / lat.length) : null, xEnabled, telegramSources: { ...userbot, hashFormatOk: TG_HASH_LOOKS_OK, hashLength: TG_API_HASH.length }, xMode: X_MODE, xPostsLeftToday: xBudgetLeft(), dryRun: DRY_RUN, claude: !!ANTHROPIC_KEY, telegram: !!TG_TOKEN, db: !!db });
       }
       if (!authed) return new Response("forbidden", { status: 403 });
       if (u.pathname.startsWith("/tg/")) return tgLoginRoute(u, req);

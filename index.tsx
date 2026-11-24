@@ -45,6 +45,16 @@ const log = (...a: any[]) => console.log(new Date().toISOString(), ...a);
 const tmo = (ms: number) => AbortSignal.timeout(ms); // every network call has a time limit, so no loop can hang forever
 process.on("unhandledRejection", (e) => log("unhandledRejection", String((e as any)?.stack || e)));
 process.on("uncaughtException", (e) => log("uncaughtException", String(e?.stack || e)));
+// On shutdown (redeploy) drop the Telegram user session at once, so the new container can take it over safely
+let stopping = false;
+const shutdown = async () => {
+  if (stopping) return; stopping = true;
+  log("shutting down");
+  try { await (globalThis as any).__tgc?.close?.(); } catch {}
+  process.exit(0);
+};
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
 const health = {
   feedOkAt: Date.now(), lastPostAt: Date.now(),
   claudeFails: 0, claudeLastError: "",
@@ -834,7 +844,7 @@ async function scheduler() {
 const userbot = { status: TG_API_ID ? "starting" : "off (TG_API_ID not set)", sources: TG_SOURCES, received: 0, posted: 0 };
 let tgc: TelegramClient | null = null;
 let login: { phone?: string; hash?: string } = {};
-const client = () => (tgc ||= new TelegramClient({ apiId: TG_API_ID, apiHash: TG_API_HASH, storage: new MemoryStorage(), logLevel: 2 } as any));
+const client = () => (tgc ||= ((globalThis as any).__tgc = new TelegramClient({ apiId: TG_API_ID, apiHash: TG_API_HASH, storage: new MemoryStorage(), logLevel: 2 } as any)));
 
 const PROMO_RE = /(t\.me\/|https?:\/\/|join (us|our|now)|subscribe|follow us|turn on notifications|share this|^@\w+$|^➡️|^👉)/i;
 const LEAD_RE = /^(?:[🚨⚡️🔴🟥‼️❗🔥📢🇺🇸\s]|BREAKING|JUST IN|NEW|UPDATE|DEVELOPING|ALERT|FLASH)+[:\-—]?\s*/iu;
@@ -902,6 +912,10 @@ async function startUserbot() {
   if (!TG_API_ID || !TG_API_HASH) return;
   const sess = mem.kv.get("tg_session");
   if (!sess) { userbot.status = "needs login: open /tg/login?token=ADMIN_TOKEN"; return log("userbot:", userbot.status); }
+  // During a redeploy the old container still holds the Telegram session for a few seconds. Two connections with the
+  // same session make Telegram kill it (AUTH_KEY_DUPLICATED), so wait until the old instance has shut down.
+  userbot.status = "waiting for previous instance to stop";
+  await Bun.sleep(Number(E.USERBOT_START_DELAY_MS || 30_000));
   try {
     await client().start({ session: sess } as any);
     await attachUserbot();

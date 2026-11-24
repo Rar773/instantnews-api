@@ -11,13 +11,16 @@ const E = Bun.env;
 const FEED_URL = E.FEED_URL || "https://www.financialjuice.com/feed.ashx?xy=rss";
 const POLL_MS = Number(E.POLL_MS || 4000); // target poll interval; backs off automatically on 429
 const MAX_AGE_MIN = Number(E.MAX_AGE_MIN || 15); // older items (recycled/old news) are ignored
-const TG_TOKEN = E.TG_TOKEN || "";
+const clean = (v?: string) => String(v || "").trim().replace(/^["']|["']$/g, ""); // pasted secrets often carry spaces or quotes
+const TG_TOKEN = clean(E.TG_TOKEN);
 const TG_CHAT = E.TG_CHAT || "@FastestNewsFeed";
-const X_KEY = E.X_API_KEY || "", X_SECRET = E.X_API_SECRET || "";
-const X_TOKEN = E.X_ACCESS_TOKEN || "", X_TOKEN_SECRET = E.X_ACCESS_SECRET || "";
+const X_KEY = clean(E.X_API_KEY), X_SECRET = clean(E.X_API_SECRET);
+const X_TOKEN = clean(E.X_ACCESS_TOKEN), X_TOKEN_SECRET = clean(E.X_ACCESS_SECRET);
+// shape check without revealing anything: lengths and whether the access token starts with the account's numeric id
+const X_KEYS_SHAPE = { apiKeyLen: X_KEY.length, apiSecretLen: X_SECRET.length, accessTokenLen: X_TOKEN.length, accessTokenLooksOk: /^\d+-[A-Za-z0-9]+$/.test(X_TOKEN), accessSecretLen: X_TOKEN_SECRET.length };
 const X_MODE = (E.X_MODE || "important").toLowerCase(); // important | all | off
 const X_DAILY_CAP = Number(E.X_DAILY_CAP || 40);
-const ANTHROPIC_KEY = E.ANTHROPIC_API_KEY || "";
+const ANTHROPIC_KEY = clean(E.ANTHROPIC_API_KEY);
 const MODELS_FAST = (E.ANTHROPIC_MODEL || "claude-haiku-5-5,claude-haiku-4-5").split(",").map((x) => x.trim());
 const MODELS_SMART = (E.ANTHROPIC_MODEL_SMART || "claude-sonnet-5-5,claude-sonnet-4-5").split(",").map((x) => x.trim());
 const FED_RSS = E.FED_RSS || "https://www.federalreserve.gov/feeds/press_monetary.xml";
@@ -1120,7 +1123,7 @@ function server() {
       }
       if (u.pathname === "/") {
         const lat = stats.lastLatencies;
-        return Response.json({ ...stats, feed: feedStat, avgLatencySec: lat.length ? Math.round(lat.reduce((a, b) => a + b, 0) / lat.length) : null, xEnabled, telegramSources: { ...userbot, hashFormatOk: TG_HASH_LOOKS_OK, hashLength: TG_API_HASH.length }, xMode: X_MODE, xPostsLeftToday: xBudgetLeft(), dryRun: DRY_RUN, claude: !!ANTHROPIC_KEY, telegram: !!TG_TOKEN, db: !!db });
+        return Response.json({ ...stats, feed: feedStat, avgLatencySec: lat.length ? Math.round(lat.reduce((a, b) => a + b, 0) / lat.length) : null, xEnabled, xKeys: X_KEYS_SHAPE, xLastError: health.xLastError || null, telegramSources: { ...userbot, hashFormatOk: TG_HASH_LOOKS_OK, hashLength: TG_API_HASH.length }, xMode: X_MODE, xPostsLeftToday: xBudgetLeft(), dryRun: DRY_RUN, claude: !!ANTHROPIC_KEY, telegram: !!TG_TOKEN, db: !!db });
       }
       if (!authed) return new Response("forbidden", { status: 403 });
       if (u.pathname.startsWith("/tg/")) return tgLoginRoute(u, req);

@@ -1,0 +1,13 @@
+{
+  "name": "instantnews-bot",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "start": "bun index.tsx",
+    "test": "bun test.ts"
+  },
+  "dependencies": {
+    "@mtcute/bun": "^0.32.7",
+    "@mtcute/core": "^0.32.7"
+  }
+}

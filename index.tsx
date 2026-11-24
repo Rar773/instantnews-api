@@ -940,6 +940,11 @@ async function tgLoginRoute(u: URL, req: Request): Promise<Response> {
   const t = encodeURIComponent(u.searchParams.get("token") || "");
   if (!TG_API_ID || !TG_API_HASH) return page("<p>Set TG_API_ID and TG_API_HASH in Railway first.</p>");
   try {
+    if (u.pathname === "/tg/login" && req.method === "GET") {
+      // start from a clean client: an old, revoked session must not be reused for the new login
+      try { await tgc?.close(); } catch {}
+      tgc = null as any; (globalThis as any).__tgc = null;
+    }
     if (u.pathname === "/tg/login" && req.method === "GET") return page(form(`/tg/login?token=${t}`, "Telefónne číslo Telegram účtu (s predvoľbou, napr. +421…)", "phone", "tel"));
     const f = await req.formData();
     if (u.pathname === "/tg/login") {

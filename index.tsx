@@ -62,6 +62,11 @@ async function dbInit() {
   await db`CREATE TABLE IF NOT EXISTS digest (id serial PRIMARY KEY, content text NOT NULL, headlines text, created_at timestamptz DEFAULT now())`;
   await db`CREATE TABLE IF NOT EXISTS cftc (id serial PRIMARY KEY, week_ending date, data jsonb, claude_analysis text, created_at timestamptz DEFAULT now())`;
   await db`ALTER TABLE news ADD COLUMN IF NOT EXISTS day text`; // table may have been created by the old instantnews-api without it
+  await db`ALTER TABLE news ADD COLUMN IF NOT EXISTS source text`;
+  await db`ALTER TABLE news ADD COLUMN IF NOT EXISTS kind text`;
+  await db`CREATE INDEX IF NOT EXISTS news_day_idx ON news (day)`;
+  await db`CREATE TABLE IF NOT EXISTS weekly (id serial PRIMARY KEY, content text NOT NULL, created_at timestamptz DEFAULT now())`;
+  await db`CREATE TABLE IF NOT EXISTS pageviews (day text, path text, views int DEFAULT 0, PRIMARY KEY (day, path))`;
   await db`DELETE FROM seen WHERE ts < now() - interval '7 days'`;
   const rows = await db`SELECT k FROM seen`;
   for (const r of rows) mem.seen.add(r.k);
@@ -91,12 +96,12 @@ function webCategory(t: string, kind: string) {
   if (/stock|s&p|nasdaq|dow|yield|bond|treasur|equit|ipo|etf|shares|\$[A-Z]{1,5}\b/i.test(t)) return "markets";
   return "other";
 }
-async function saveNews(headline: string, content: string, kind: string, highAlert: boolean) {
+async function saveNews(headline: string, content: string, kind: string, highAlert: boolean, source: string | null = null) {
   const day = localDay();
   mem.headlines.push({ day, title: headline });
   if (mem.headlines.length > 400) mem.headlines.shift();
   const ticker = headline.match(/\$([A-Z]{1,5})\b/)?.[1] || null;
-  if (db) await db`INSERT INTO news (headline, content, category, ticker, high_alert, day) VALUES (${headline}, ${content || null}, ${webCategory(headline, kind)}, ${ticker}, ${highAlert}, ${day})`.catch((e) => log("db news", String(e)));
+  if (db) await db`INSERT INTO news (headline, content, category, ticker, high_alert, day, source, kind) VALUES (${headline}, ${content || null}, ${webCategory(headline, kind)}, ${ticker}, ${highAlert}, ${day}, ${source}, ${kind})`.catch((e) => log("db news", String(e)));
 }
 async function todaysHeadlines(): Promise<string[]> {
   const day = localDay();
@@ -542,7 +547,7 @@ async function handleItem(it: Item, opts: ItemOpts = {}) {
   stats.posted++;
   health.lastPostAt = Date.now();
   stats.lastLatencies = [latency, ...stats.lastLatencies].slice(0, 20);
-  if (c.kind !== "imbalance" && c.kind !== "cftc") await saveNews(it.title, it.content, c.kind, c.highAlert);
+  if (c.kind !== "imbalance" && c.kind !== "cftc") await saveNews(it.title, it.content, c.kind, c.highAlert, opts.sourceName || (via === "feed" ? "FinancialJuice" : null));
   log(`posted [${c.kind}${c.highAlert ? ",ALERT" : ""}${toX ? ",X" : ""}${opts.media ? "," + opts.media.kind : ""}] +${latency}s (${via}) | ${it.title.slice(0, 90)}`);
 }
 
@@ -763,6 +768,7 @@ Bottom line: [1-2 sentences, clear bias for NQ this week and what would change i
     return;
   }
   await kvSet("weekly_day", localDay());
+  if (db) await db`INSERT INTO weekly (content) VALUES (${out})`.catch((e) => log("db weekly", String(e)));
   await Promise.all([tgText(out), xPost(out, null, true)]);
   log("weekly posted");
 }
@@ -949,6 +955,8 @@ async function runBackup() {
     imbalances: await db`SELECT * FROM imbalances ORDER BY id DESC LIMIT 200`,
     digest: await db`SELECT * FROM digest ORDER BY id DESC LIMIT 60`,
     cftc: await db`SELECT * FROM cftc ORDER BY id DESC LIMIT 60`,
+    weekly: await db`SELECT * FROM weekly ORDER BY id DESC LIMIT 20`,
+    pageviews: await db`SELECT * FROM pageviews WHERE day >= ${new Date(Date.now() - 60 * 86_400_000).toISOString().slice(0, 10)}`,
     kv: (await db`SELECT * FROM kv`).filter((r: any) => r.k !== "tg_session"),
   };
   const gz = Bun.gzipSync(new TextEncoder().encode(JSON.stringify(dump)));
@@ -976,7 +984,7 @@ async function adminLoop() {
         const chat = String(m.chat.id), txt = m.text.trim(), isAdmin = chat === adminChat();
         const reply = (t: string) => tgCall("sendMessage", { chat_id: chat, text: t });
         if (txt.startsWith("/admin ")) {
-          if (ADMIN_TOKEN && txt.slice(7).trim() === ADMIN_TOKEN) { await kvSet("admin_chat", chat); await reply("✅ Si nastavený ako admin. Sem ti budú chodiť upozornenia a zálohy.\n\n/status — stav\n/pause — zastaviť postovanie\n/resume — spustiť\n/digest — poslať digest teraz\n/weekly — poslať NQ výhľad teraz\n/backup — záloha teraz"); }
+          if (ADMIN_TOKEN && txt.slice(7).trim() === ADMIN_TOKEN) { await kvSet("admin_chat", chat); await reply("✅ Si nastavený ako admin. Sem ti budú chodiť upozornenia a zálohy.\n\n/status — stav\n/pause — zastaviť postovanie\n/resume — spustiť\n/digest — poslať digest teraz\n/weekly — poslať NQ výhľad teraz\n/backup — záloha teraz\n/web — návštevnosť webu"); }
           else await reply("❌ Nesprávny kód.");
           continue;
         }
@@ -987,7 +995,12 @@ async function adminLoop() {
         else if (txt === "/digest") { await reply("Posielam digest…"); await runDigest(true); }
         else if (txt === "/weekly") { await reply("Posielam NQ výhľad…"); await runWeekly(true); }
         else if (txt === "/backup") { await kvSet("backup_day", ""); await runBackup(); }
-        else await reply("Príkazy: /status /pause /resume /digest /weekly /backup");
+        else if (txt === "/web") {
+          const rows = db ? await db`SELECT day, sum(views)::int AS v FROM pageviews WHERE day >= ${new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10)} GROUP BY day ORDER BY day DESC` : [];
+          const top = db ? await db`SELECT path, sum(views)::int AS v FROM pageviews WHERE day = ${localDay()} GROUP BY path ORDER BY v DESC LIMIT 5` : [];
+          await reply(`🌐 Návštevnosť webu (bez cookies)\n\n${rows.map((r: any) => `${r.day}: ${r.v}`).join("\n") || "zatiaľ nič"}${top.length ? `\n\nDnes najviac:\n${top.map((r: any) => `${r.path} — ${r.v}`).join("\n")}` : ""}`);
+        }
+        else await reply("Príkazy: /status /pause /resume /digest /weekly /backup /web");
       }
     } catch (e) { log("admin loop error", String(e)); await Bun.sleep(5000); }
   }
@@ -1009,8 +1022,31 @@ function server() {
           let rows: any;
           const cat = u.searchParams.get("category") || u.searchParams.get("cat");
           const type = u.searchParams.get("type")?.toUpperCase();
+          const before = parseInt(u.searchParams.get("before") || "") || 2147483647;
+          const q = (u.searchParams.get("q") || "").trim().slice(0, 80);
+          const like = q ? `%${q.replace(/[\\%_]/g, (c) => "\\" + c)}%` : "%";
+          const alertsOnly = u.searchParams.get("alert") === "1";
           switch (u.pathname) {
-            case "/api/news": rows = cat && cat !== "all" ? await db`SELECT * FROM news WHERE category = ${cat} ORDER BY id DESC LIMIT ${lim(20)}` : await db`SELECT * FROM news ORDER BY id DESC LIMIT ${lim(20)}`; break;
+            case "/api/news": rows = await db`SELECT id, headline, content, category, ticker, high_alert, source, kind, created_at FROM news
+              WHERE id < ${before} AND (${!cat || cat === "all"} OR category = ${cat}) AND (${!alertsOnly} OR high_alert)
+              AND (headline ILIKE ${like} OR coalesce(content, '') ILIKE ${like}) ORDER BY id DESC LIMIT ${lim(20)}`; break;
+            case "/api/stats": {
+              const day = localDay();
+              const [t] = await db`SELECT count(*)::int AS today, count(*) FILTER (WHERE high_alert)::int AS alerts_today, max(created_at) AS last_at FROM news WHERE day = ${day}`;
+              const [w] = await db`SELECT count(*)::int AS week FROM news WHERE created_at > now() - interval '7 days'`;
+              const lat = stats.lastLatencies;
+              return Response.json({ success: true, data: { ...t, ...w, avg_latency_sec: lat.length ? Math.round(lat.reduce((a, b) => a + b, 0) / lat.length) : null, online: Date.now() - health.feedOkAt < 5 * 60_000 } }, { headers: cors });
+            }
+            case "/api/calendar": {
+              const evs = (await calendarEvents()).filter((e) => e.country === "USD" && (e.impact === "High" || e.impact === "Medium"));
+              return Response.json({ success: true, data: evs.map((e) => ({ title: e.title, date: e.date, impact: e.impact, forecast: e.forecast || null, previous: e.previous || null })) }, { headers: { ...cors, "Cache-Control": "public, max-age=300" } });
+            }
+            case "/api/weekly": rows = await db`SELECT * FROM weekly ORDER BY id DESC LIMIT ${lim(1)}`; break;
+            case "/api/hit": { // privacy-friendly page counter: no cookies, no IP, only day + path
+              const path = (u.searchParams.get("p") || "/").replace(/[^a-z0-9/._-]/gi, "").slice(0, 60) || "/";
+              await db`INSERT INTO pageviews (day, path, views) VALUES (${localDay()}, ${path}, 1) ON CONFLICT (day, path) DO UPDATE SET views = pageviews.views + 1`.catch(() => {});
+              return new Response(null, { status: 204, headers: cors });
+            }
             case "/api/imbalances": rows = type ? await db`SELECT * FROM imbalances WHERE type = ${type} ORDER BY id DESC LIMIT ${lim(10)}` : await db`SELECT * FROM imbalances ORDER BY id DESC LIMIT ${lim(10)}`; break;
             case "/api/imbalances/today": rows = await db`SELECT * FROM imbalances WHERE created_at >= now() - interval '24 hours' ORDER BY id DESC`; break;
             case "/api/digest": rows = await db`SELECT * FROM digest ORDER BY id DESC LIMIT ${lim(7)}`; break;

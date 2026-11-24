@@ -559,22 +559,39 @@ async function handleFeed(xml: string, seedOnly = false) {
   for (const it of fresh) handleItem(it).catch((e) => { stats.errors++; log("item error", String(e)); });
 }
 
+// FinancialJuice limits how often one IP may ask. The loop learns the fastest safe interval by itself:
+// a 429 doubles the wait (or honours Retry-After) and raises the "floor"; after a calm stretch it probes slightly faster again.
+const feedStat = { ok: 0, r429: 0, notModified: 0, floor: POLL_MS, last429: "", headers429: "" };
 async function pollLoop() {
-  let interval = POLL_MS;
+  let interval = POLL_MS, okStreak = 0, etag = "", lastMod = "";
   const firstRun = mem.seen.size === 0; // empty memory: don't flood the channel with the whole feed
   let seeded = !firstRun;
   while (true) {
     const t0 = Date.now();
     try {
-      const r = await fetch(FEED_URL, { signal: tmo(8000), headers: { "User-Agent": "Mozilla/5.0 (InstantNews)", "Cache-Control": "no-cache" } });
+      const h: Record<string, string> = { "User-Agent": "Mozilla/5.0 (InstantNews)", Accept: "application/rss+xml, application/xml;q=0.9, */*;q=0.8" };
+      if (etag) h["If-None-Match"] = etag;
+      if (lastMod) h["If-Modified-Since"] = lastMod;
+      const r = await fetch(FEED_URL, { signal: tmo(8000), headers: h });
       stats.polls++; stats.lastPoll = new Date().toISOString();
-      if (r.status === 429) { stats.http429++; interval = Math.min(interval * 2, 60_000); log("429 from feed, interval ->", interval); }
-      else if (r.ok) {
-        health.feedOkAt = Date.now();
+      if (r.status === 429) {
+        stats.http429++; feedStat.r429++; okStreak = 0;
+        feedStat.last429 = new Date().toISOString();
+        const ra = Number(r.headers.get("retry-after") || 0);
+        if (!feedStat.headers429) { feedStat.headers429 = JSON.stringify(Object.fromEntries(r.headers)).slice(0, 600); log("429 headers", feedStat.headers429); }
+        feedStat.floor = Math.min(60_000, Math.max(feedStat.floor, Math.round(interval * 1.25)));
+        interval = Math.min(Math.max(interval * 2, ra * 1000, feedStat.floor), 120_000);
+        log("429 from feed, interval ->", interval, "floor", feedStat.floor);
+      } else if (r.status === 304) {
+        health.feedOkAt = Date.now(); feedStat.notModified++; okStreak++;
+      } else if (r.ok) {
+        health.feedOkAt = Date.now(); feedStat.ok++; okStreak++;
+        etag = r.headers.get("etag") || ""; lastMod = r.headers.get("last-modified") || "";
         await handleFeed(await r.text(), !seeded);
         if (!seeded) { seeded = true; log("seeded current feed items (not posted)"); }
-        if (interval > POLL_MS) interval = Math.max(POLL_MS, interval - 1000);
       } else log("feed status", r.status);
+      if (okStreak > 0 && interval > feedStat.floor) interval = Math.max(feedStat.floor, Math.round(interval * 0.8)); // recover quickly to the safe floor
+      if (okStreak >= 150 && feedStat.floor > POLL_MS) { feedStat.floor = Math.max(POLL_MS, feedStat.floor - 500); okStreak = 0; } // long calm stretch: try a bit faster
     } catch (e) { stats.errors++; log("poll error", String(e)); }
     stats.interval = interval;
     await Bun.sleep(Math.max(250, interval - (Date.now() - t0)));
@@ -883,7 +900,7 @@ function statusText() {
   const ago = (t: number) => (t ? Math.round((Date.now() - t) / 60_000) + " min" : "—");
   return [
     `⚡ InstantNews ${mem.kv.get("paused") === "1" ? "⏸ POZASTAVENÝ" : "✅ beží"}`,
-    `Feed: posledný OK pred ${ago(health.feedOkAt)} (interval ${stats.interval / 1000}s, 429×${stats.http429})`,
+    `Feed: posledný OK pred ${ago(health.feedOkAt)} (interval ${stats.interval / 1000}s, OK×${feedStat.ok + feedStat.notModified}, 429×${feedStat.r429})`,
     `Posty: ${stats.posted} od štartu, posledný pred ${ago(health.lastPostAt)}, preskočené ${stats.skipped}`,
     `Oneskorenie (priemer): ${stats.lastLatencies.length ? Math.round(stats.lastLatencies.reduce((a, b) => a + b, 0) / stats.lastLatencies.length) + " s" : "—"}`,
     `X: ${xEnabled ? `${X_MODE}, zostáva dnes ${xBudgetLeft()}/${X_DAILY_CAP}` : "vypnuté"}${health.xLastError ? ` | posledná chyba: ${health.xLastError}` : ""}`,
@@ -1001,7 +1018,7 @@ function server() {
       }
       if (u.pathname === "/") {
         const lat = stats.lastLatencies;
-        return Response.json({ ...stats, avgLatencySec: lat.length ? Math.round(lat.reduce((a, b) => a + b, 0) / lat.length) : null, xEnabled, telegramSources: userbot, xMode: X_MODE, xPostsLeftToday: xBudgetLeft(), dryRun: DRY_RUN, claude: !!ANTHROPIC_KEY, telegram: !!TG_TOKEN, db: !!db });
+        return Response.json({ ...stats, feed: feedStat, avgLatencySec: lat.length ? Math.round(lat.reduce((a, b) => a + b, 0) / lat.length) : null, xEnabled, telegramSources: userbot, xMode: X_MODE, xPostsLeftToday: xBudgetLeft(), dryRun: DRY_RUN, claude: !!ANTHROPIC_KEY, telegram: !!TG_TOKEN, db: !!db });
       }
       if (!authed) return new Response("forbidden", { status: 403 });
       if (u.pathname.startsWith("/tg/")) return tgLoginRoute(u, req);

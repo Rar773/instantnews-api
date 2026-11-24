@@ -186,7 +186,7 @@ const SKIP = [
   "at marginal rate", "overnight with it", "deposit facility usage", "marginal lending facility",
   // low-value routine items (Telegram readers asked for less noise)
   "Fed bids for", "Treasury WI", "WATCH LIVE", "Watch live", "Redbook", "ADP Wkly", "Fear & Greed", "Bid-to-Cover", "recruits",
-  "to auction $", "bills on", "to offer NZ$", "Live stream", "LIVE:", "with it overnight",
+  "to auction $", "bills on", "to offer NZ$", "Live stream", "LIVE:", "with it overnight", "press conference ends",
 ];
 const MAG7 = /\$(AAPL|MSFT|NVDA|GOOGL?|AMZN|META|TSLA)\b|\b(Apple|Microsoft|Nvidia|Alphabet|Google|Amazon|Meta|Tesla)\b/i;
 // Market-moving words: a speaker who has already been quoted several times still gets through with these
@@ -194,6 +194,8 @@ const MOVERS = /\b(hike|hikes|hiking|cut|cuts|cutting|recession|intervention|int
 const SPEAKER_CAP = Number(E.SPEAKER_CAP || 2); // quotes per speaker per hour before only market-moving lines pass
 const SPEAKER_CAP_FOREIGN_CB = Number(E.SPEAKER_CAP_FOREIGN_CB || 1); // BoE/BoC/ECB/BoJ… officials matter less to US traders
 const FOREIGN_CB = /^(BoE|BoC|ECB|BoJ|RBA|RBNZ|SNB|PBoC|Riksbank|Norges|Bank of (England|Canada|Japan))\b/i;
+const FOREIGN_CB_ANY = /\b(BoE|BoC|ECB|BoJ|RBA|RBNZ|SNB|PBoC|Riksbank|Norges ?Bank|Bank of (England|Canada|Japan))\b/i;
+const BROKER_CALL = /\b(expects?|we see|now sees?|forecasts?)\b/i;
 const speakerLog = new Map<string, number[]>();
 // "BoC's Gov. Macklem: ...", "BoE’s Greene: ...", "Putin: ..." -> macklem / greene / putin
 export function speakerOf(title: string) {
@@ -207,6 +209,8 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
   if (/target price|price target/i.test(title) && !MAG7.test(title)) return "price target";
   // daily futures settlements: keep only WTI crude and gold, drop gasoline/diesel/natgas/silver/copper… settles
   if (/\bsettle[sd]?\b/i.test(title) && /futures/i.test(title) && !/\b(WTI|Crude|Gold)\b/i.test(title)) return "minor settlement";
+  // bank/broker calls on a FOREIGN central bank ("BMO expects Bank of Canada to hike", "Nomura: We see the BOC to hike") — Fed calls stay
+  if (!highAlert && BROKER_CALL.test(title) && FOREIGN_CB_ANY.test(title) && !FOREIGN_CB.test(title) && !/\b(Fed|FOMC|Powell)\b/.test(title)) return "foreign CB broker call";
   const sp = speakerOf(title);
   if (!sp || highAlert || ALWAYS_ALLOW.some((k) => title.toLowerCase().includes(k))) return null;
   const times = (speakerLog.get(sp) || []).filter((t) => now - t < 60 * 60_000);

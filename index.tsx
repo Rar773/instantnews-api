@@ -61,6 +61,7 @@ async function dbInit() {
   await db`CREATE TABLE IF NOT EXISTS imbalances (id serial PRIMARY KEY, type text NOT NULL, sp500 bigint, nasdaq bigint, dow30 bigint, mag7 bigint, claude_analysis text, created_at timestamptz DEFAULT now())`;
   await db`CREATE TABLE IF NOT EXISTS digest (id serial PRIMARY KEY, content text NOT NULL, headlines text, created_at timestamptz DEFAULT now())`;
   await db`CREATE TABLE IF NOT EXISTS cftc (id serial PRIMARY KEY, week_ending date, data jsonb, claude_analysis text, created_at timestamptz DEFAULT now())`;
+  await db`ALTER TABLE news ADD COLUMN IF NOT EXISTS day text`; // table may have been created by the old instantnews-api without it
   await db`DELETE FROM seen WHERE ts < now() - interval '7 days'`;
   const rows = await db`SELECT k FROM seen`;
   for (const r of rows) mem.seen.add(r.k);
@@ -563,7 +564,8 @@ async function handleFeed(xml: string, seedOnly = false) {
 // a 429 doubles the wait (or honours Retry-After) and raises the "floor"; after a calm stretch it probes slightly faster again.
 const feedStat = { ok: 0, r429: 0, notModified: 0, floor: POLL_MS, last429: "", headers429: "" };
 async function pollLoop() {
-  let interval = POLL_MS, okStreak = 0, etag = "", lastMod = "";
+  feedStat.floor = Math.max(POLL_MS, Number(mem.kv.get("feed_floor") || 0)); // remembered across restarts
+  let interval = feedStat.floor, okStreak = 0, etag = "", lastMod = "", savedFloor = feedStat.floor;
   const firstRun = mem.seen.size === 0; // empty memory: don't flood the channel with the whole feed
   let seeded = !firstRun;
   while (true) {
@@ -593,6 +595,7 @@ async function pollLoop() {
       if (okStreak > 0 && interval > feedStat.floor) interval = Math.max(feedStat.floor, Math.round(interval * 0.8)); // recover quickly to the safe floor
       if (okStreak >= 150 && feedStat.floor > POLL_MS) { feedStat.floor = Math.max(POLL_MS, feedStat.floor - 500); okStreak = 0; } // long calm stretch: try a bit faster
     } catch (e) { stats.errors++; log("poll error", String(e)); }
+    if (feedStat.floor !== savedFloor) { savedFloor = feedStat.floor; kvSet("feed_floor", String(savedFloor)); }
     stats.interval = interval;
     await Bun.sleep(Math.max(250, interval - (Date.now() - t0)));
   }

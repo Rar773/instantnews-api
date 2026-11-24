@@ -988,13 +988,25 @@ async function adminLoop() {
           else await reply("❌ Nesprávny kód.");
           continue;
         }
-        if (!isAdmin) { await reply("⚡ InstantNews — správy nájdeš na @FastestNewsFeed"); continue; }
+        if (!isAdmin) { // public contact channel: forward to the admin, thank the sender
+          if (adminChat()) {
+            await tgCall("forwardMessage", { chat_id: adminChat(), from_chat_id: chat, message_id: m.message_id });
+            await adminSay(`✉️ Správa od ${m.from?.username ? "@" + m.from.username : m.from?.first_name || "?"} — odpovieš takto:\n/reply ${chat} tvoj text`);
+          }
+          await reply(txt === "/start" ? "⚡ InstantNews — breaking news on @FastestNewsFeed\n\nWrite us a message here and we will get back to you." : "✅ Thanks, we got your message and will reply here.");
+          continue;
+        }
         if (txt === "/status" || txt === "/start") await reply(statusText());
         else if (txt === "/pause") { await kvSet("paused", "1"); await reply("⏸ Postovanie pozastavené. /resume ho spustí."); }
         else if (txt === "/resume") { await kvSet("paused", "0"); await reply("▶️ Postovanie znova beží."); }
         else if (txt === "/digest") { await reply("Posielam digest…"); await runDigest(true); }
         else if (txt === "/weekly") { await reply("Posielam NQ výhľad…"); await runWeekly(true); }
         else if (txt === "/backup") { await kvSet("backup_day", ""); await runBackup(); }
+        else if (txt.startsWith("/reply ")) {
+          const [, to, ...rest] = txt.split(" ");
+          const r = await tgCall("sendMessage", { chat_id: to, text: rest.join(" ") });
+          await reply(r?.ok ? "✅ Odoslané." : "❌ Nepodarilo sa odoslať: " + (r?.description || ""));
+        }
         else if (txt === "/web") {
           const rows = db ? await db`SELECT day, sum(views)::int AS v FROM pageviews WHERE day >= ${new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10)} GROUP BY day ORDER BY day DESC` : [];
           const top = db ? await db`SELECT path, sum(views)::int AS v FROM pageviews WHERE day = ${localDay()} GROUP BY path ORDER BY v DESC LIMIT 5` : [];

@@ -192,6 +192,8 @@ export function speakerOf(title: string) {
 // Extra noise filter on top of classify(): analyst price targets outside Mag 7, and long speech barrages from one speaker
 export function noiseReason(title: string, highAlert: boolean, now = Date.now()): string | null {
   if (/target price|price target/i.test(title) && !MAG7.test(title)) return "price target";
+  // daily futures settlements: keep only WTI crude and gold, drop gasoline/diesel/natgas/silver/copper… settles
+  if (/\bsettle[sd]?\b/i.test(title) && /futures/i.test(title) && !/\b(WTI|Crude|Gold)\b/i.test(title)) return "minor settlement";
   const sp = speakerOf(title);
   if (!sp || highAlert || ALWAYS_ALLOW.some((k) => title.toLowerCase().includes(k))) return null;
   const times = (speakerLog.get(sp) || []).filter((t) => now - t < 60 * 60_000);

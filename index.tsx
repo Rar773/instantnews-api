@@ -171,7 +171,35 @@ const SKIP = [
   "Goldman Sachs speaking", "JPMorgan speaking", "Morgan Stanley speaking", "Bill Auction", "TIPS Auction", "Currency Strength Chart",
   "Utilization April", "Claimant", "Rightmove", "Halifax", "Nationwide",
   "at marginal rate", "overnight with it", "deposit facility usage", "marginal lending facility",
+  // low-value routine items (Telegram readers asked for less noise)
+  "Fed bids for", "Treasury WI", "WATCH LIVE", "Watch live", "Redbook", "ADP Wkly", "Fear & Greed", "Bid-to-Cover", "recruits",
+  "to auction $", "bills on", "to offer NZ$", "Live stream", "LIVE:", "with it overnight",
 ];
+const MAG7 = /\$(AAPL|MSFT|NVDA|GOOGL?|AMZN|META|TSLA)\b|\b(Apple|Microsoft|Nvidia|Alphabet|Google|Amazon|Meta|Tesla)\b/i;
+// Market-moving words: a speaker who has already been quoted several times still gets through with these
+const MOVERS = /\b(hike|hikes|hiking|cut|cuts|cutting|recession|intervention|intervene|emergency|QE|tightening|easing|tariffs?|sanctions?|war|ceasefire|default|downgrade|upgrade)\b/i;
+const SPEAKER_CAP = Number(E.SPEAKER_CAP || 2); // quotes per speaker per hour before only market-moving lines pass
+const SPEAKER_CAP_FOREIGN_CB = Number(E.SPEAKER_CAP_FOREIGN_CB || 1); // BoE/BoC/ECB/BoJ… officials matter less to US traders
+const FOREIGN_CB = /^(BoE|BoC|ECB|BoJ|RBA|RBNZ|SNB|PBoC|Riksbank|Norges|Bank of (England|Canada|Japan))\b/i;
+const speakerLog = new Map<string, number[]>();
+// "BoC's Gov. Macklem: ...", "BoE’s Greene: ...", "Putin: ..." -> macklem / greene / putin
+export function speakerOf(title: string) {
+  const m = title.match(/^([^:]{2,45}):\s/);
+  if (!m || /\b(Actual|Forecast|Previous)\b/.test(title)) return null;
+  const words = m[1].replace(/[’']s\b/g, "").split(/\s+/).filter((w) => /^[A-Za-z][A-Za-z.\-]*$/.test(w));
+  return words.length ? words[words.length - 1].toLowerCase() : null;
+}
+// Extra noise filter on top of classify(): analyst price targets outside Mag 7, and long speech barrages from one speaker
+export function noiseReason(title: string, highAlert: boolean, now = Date.now()): string | null {
+  if (/target price|price target/i.test(title) && !MAG7.test(title)) return "price target";
+  const sp = speakerOf(title);
+  if (!sp || highAlert || ALWAYS_ALLOW.some((k) => title.toLowerCase().includes(k))) return null;
+  const times = (speakerLog.get(sp) || []).filter((t) => now - t < 60 * 60_000);
+  const cap = FOREIGN_CB.test(title) ? SPEAKER_CAP_FOREIGN_CB : SPEAKER_CAP;
+  if (times.length >= cap && !MOVERS.test(title)) { speakerLog.set(sp, times); return "speaker cap (" + sp + ")"; }
+  times.push(now); speakerLog.set(sp, times);
+  return null;
+}
 // Non-US economic data is skipped, but geopolitics about these countries (e.g. China/Taiwan) still goes through
 const NON_US = [
   "German", "Germany", "French", "France", "Italian", "Spanish", "Spain", "Eurozone", "Euro Zone", "ECB", "BoC", "Bank of Canada",
@@ -502,20 +530,24 @@ const stats = { started: new Date().toISOString(), polls: 0, http429: 0, lastPol
 
 // fuzzy duplicate check across all sources (FJ RSS + Telegram channels): same story, different wording
 const STOP = new Set("the a an and or of to in on for at by with from as is are was were be been it its this that says said say will would after over amid into than per via has have had not no new just breaking report reports reported according source sources".split(" "));
-const recent: { tokens: Set<string>; ts: number; src: string }[] = [];
+const recent: { tokens: Set<string>; ts: number; src: string; data?: boolean }[] = [];
 const toks = (s: string) => new Set(norm(s).split(" ").filter((w) => w.length > 2 && !STOP.has(w)));
 // Only compares across DIFFERENT sources: items from one source are already de-duplicated by id, and similar-looking
 // lines from the same source are usually separate facts (CPI MoM vs CPI YoY, initial vs continuing claims, two Fed speakers).
-export function isDuplicateStory(text: string, src = "feed") {
-  const t = toks(text), now = Date.now();
+export function isDuplicateStory(text: string, src = "feed", now = Date.now()) {
+  const t = toks(text);
+  const isData = /\bActual\b/.test(text);
   while (recent.length && now - recent[0].ts > 90 * 60_000) recent.shift();
   if (t.size < 3) return false;
   for (const r of recent) {
     let inter = 0;
     for (const w of t) if (r.tokens.has(w)) inter++;
-    if (r.src !== src && inter / Math.min(t.size, r.tokens.size) >= 0.7 && inter >= 4) return true;
+    const overlap = inter / Math.min(t.size, r.tokens.size);
+    if (r.src !== src && overlap >= 0.7 && inter >= 4) return true;
+    // same source repeating itself (e.g. 6 WSJ tariff lines in 3 minutes) — never for data lines like CPI MoM/YoY
+    if (r.src === src && !isData && !r.data && overlap >= 0.8 && inter >= 4 && now - r.ts < 15 * 60_000) return true;
   }
-  recent.push({ tokens: t, ts: now, src });
+  recent.push({ tokens: t, ts: now, src, data: isData });
   return false;
 }
 
@@ -527,6 +559,8 @@ async function handleItem(it: Item, opts: ItemOpts = {}) {
   if (mem.kv.get("paused") === "1" && via !== "test") return log("paused, not posting:", it.title.slice(0, 80));
   if (c.skip) { stats.skipped++; return log("skip", c.reason, "|", it.title.slice(0, 90)); }
   if (c.kind !== "imbalance" && c.kind !== "cftc" && via !== "test" && isDuplicateStory(it.title, via)) { stats.skipped++; return log("duplicate story", `(${via})`, it.title.slice(0, 90)); }
+  const noise = c.kind === "news" && via !== "test" ? noiseReason(it.title, c.highAlert || !!opts.alert) : null;
+  if (noise) { stats.skipped++; return log("skip", noise, "|", it.title.slice(0, 90)); }
   const credit = opts.sourceName ? `\n\nSource: ${opts.sourceName}` : ""; // foreign content: source always at the very bottom
   const latency = Math.round((Date.now() - it.pubDate) / 1000);
   const toX = X_MODE === "all" || c.highAlert || c.kind !== "news";

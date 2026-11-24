@@ -868,13 +868,22 @@ async function startUserbot() {
   } catch (e) { userbot.status = "login expired — open /tg/login?token=ADMIN_TOKEN (" + String(e).slice(0, 120) + ")"; log("userbot start failed", String(e)); }
 }
 async function finishLogin() {
+  loginKey = ""; // the one-time link is used up
   await kvSet("tg_session", await client().exportSession());
   await attachUserbot();
 }
 const page = (body: string) => new Response(`<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>InstantNews login</title><body style="font-family:system-ui;background:#0a0a0b;color:#eee;max-width:420px;margin:40px auto;padding:0 16px">${body}</body>`, { headers: { "content-type": "text/html; charset=utf-8" } });
 const form = (action: string, label: string, name: string, type = "text") => `<h2>InstantNews ⚡ Telegram</h2><form method=post action="${action}"><p>${label}</p><input name=${name} type=${type} required style="width:100%;padding:10px;font-size:16px"><p><button style="padding:10px 20px;font-size:16px">OK</button></p></form>`;
+// one-time login link sent to the admin chat, so the admin password never has to be typed into a URL
+let loginKey = "", loginKeyExp = 0;
+function tgLoginLink() {
+  loginKey = crypto.randomUUID().replace(/-/g, ""); loginKeyExp = Date.now() + 30 * 60_000;
+  const host = E.RAILWAY_PUBLIC_DOMAIN || "localhost:" + (E.PORT || 3000);
+  return `https://${host}/tg/login?token=${loginKey}`;
+}
+const isLoginKey = (t: string | null) => !!loginKey && t === loginKey && Date.now() < loginKeyExp;
 async function tgLoginRoute(u: URL, req: Request): Promise<Response> {
-  const t = encodeURIComponent(ADMIN_TOKEN);
+  const t = encodeURIComponent(u.searchParams.get("token") || "");
   if (!TG_API_ID || !TG_API_HASH) return page("<p>Set TG_API_ID and TG_API_HASH in Railway first.</p>");
   try {
     if (u.pathname === "/tg/login" && req.method === "GET") return page(form(`/tg/login?token=${t}`, "Telefónne číslo Telegram účtu (s predvoľbou, napr. +421…)", "phone", "tel"));
@@ -938,7 +947,7 @@ async function watchdog() {
       await setAlert("x", xEnabled && health.xLastErrorAt > health.xLastOkAt && Date.now() - health.xLastErrorAt < 60 * 60_000, `X API — ${health.xLastError} (402 = minuli sa kredity, 401/403 = kľúče alebo práva)`);
       await setAlert("claude", health.claudeFails >= 3, `Anthropic API — ${health.claudeLastError} (skontroluj kredit na console.anthropic.com)`);
       await setAlert("tg", health.tgFails >= 3, `Telegram kanál — ${health.tgLastError}`);
-      await setAlert("userbot", !!TG_API_ID && TG_SOURCES.length > 0 && /needs login|expired/.test(userbot.status), "Telegram účet odhlásený — otvor prihlasovaciu stránku /tg/login");
+      await setAlert("userbot", !!TG_API_ID && TG_SOURCES.length > 0 && /needs login|expired/.test(userbot.status), "Telegram účet nie je prihlásený (čítanie kanálov stojí) — pošli mi /tglogin a dostaneš prihlasovací odkaz");
     } catch (e) { log("watchdog error", String(e)); }
     await Bun.sleep(60_000);
   }
@@ -984,7 +993,7 @@ async function adminLoop() {
         const chat = String(m.chat.id), txt = m.text.trim(), isAdmin = chat === adminChat();
         const reply = (t: string) => tgCall("sendMessage", { chat_id: chat, text: t });
         if (txt.startsWith("/admin ")) {
-          if (ADMIN_TOKEN && txt.slice(7).trim() === ADMIN_TOKEN) { await kvSet("admin_chat", chat); await reply("✅ Si nastavený ako admin. Sem ti budú chodiť upozornenia a zálohy.\n\n/status — stav\n/pause — zastaviť postovanie\n/resume — spustiť\n/digest — poslať digest teraz\n/weekly — poslať NQ výhľad teraz\n/backup — záloha teraz\n/web — návštevnosť webu"); }
+          if (ADMIN_TOKEN && txt.slice(7).trim() === ADMIN_TOKEN) { await kvSet("admin_chat", chat); await reply("✅ Si nastavený ako admin. Sem ti budú chodiť upozornenia a zálohy.\n\n/status — stav\n/pause — zastaviť postovanie\n/resume — spustiť\n/digest — poslať digest teraz\n/weekly — poslať NQ výhľad teraz\n/backup — záloha teraz\n/web — návštevnosť webu\n/tglogin — prihlásiť Telegram účet\n/reply ID text — odpovedať na správu"); }
           else await reply("❌ Nesprávny kód.");
           continue;
         }
@@ -1007,12 +1016,16 @@ async function adminLoop() {
           const r = await tgCall("sendMessage", { chat_id: to, text: rest.join(" ") });
           await reply(r?.ok ? "✅ Odoslané." : "❌ Nepodarilo sa odoslať: " + (r?.description || ""));
         }
+        else if (txt === "/tglogin") {
+          if (!TG_API_ID || !TG_API_HASH) await reply("Najprv nastav TG_API_ID a TG_API_HASH v Railway.");
+          else await reply(`🔐 Prihlásenie Telegram účtu (odkaz platí 30 min, len pre teba):\n${tgLoginLink()}\n\nZadaj číslo, potom kód z Telegramu (a heslo, ak máš dvojstupňové overenie).`);
+        }
         else if (txt === "/web") {
           const rows = db ? await db`SELECT day, sum(views)::int AS v FROM pageviews WHERE day >= ${new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10)} GROUP BY day ORDER BY day DESC` : [];
           const top = db ? await db`SELECT path, sum(views)::int AS v FROM pageviews WHERE day = ${localDay()} GROUP BY path ORDER BY v DESC LIMIT 5` : [];
           await reply(`🌐 Návštevnosť webu (bez cookies)\n\n${rows.map((r: any) => `${r.day}: ${r.v}`).join("\n") || "zatiaľ nič"}${top.length ? `\n\nDnes najviac:\n${top.map((r: any) => `${r.path} — ${r.v}`).join("\n")}` : ""}`);
         }
-        else await reply("Príkazy: /status /pause /resume /digest /weekly /backup /web");
+        else await reply("Príkazy: /status /pause /resume /digest /weekly /backup /web /tglogin /reply");
       }
     } catch (e) { log("admin loop error", String(e)); await Bun.sleep(5000); }
   }
@@ -1024,7 +1037,7 @@ function server() {
     port: Number(E.PORT || 3000),
     async fetch(req) {
       const u = new URL(req.url);
-      const authed = ADMIN_TOKEN && u.searchParams.get("token") === ADMIN_TOKEN;
+      const authed = (ADMIN_TOKEN && u.searchParams.get("token") === ADMIN_TOKEN) || (u.pathname.startsWith("/tg/") && isLoginKey(u.searchParams.get("token")));
       if (u.pathname.startsWith("/api/") || u.pathname === "/health") {
         const cors = { "Access-Control-Allow-Origin": "*" };
         if (u.pathname === "/health") return Response.json({ status: "ok", timestamp: new Date().toISOString() }, { headers: cors });

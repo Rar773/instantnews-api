@@ -164,6 +164,7 @@ const SKIP = [
   "FJElite", "MUFG:", "Credit Agricole", "Speaks -", "interview ends", "ends remarks", "CEO Speaks", "speaks at", "Huang Speaks",
   "Goldman Sachs speaking", "JPMorgan speaking", "Morgan Stanley speaking", "Bill Auction", "TIPS Auction", "Currency Strength Chart",
   "Utilization April", "Claimant", "Rightmove", "Halifax", "Nationwide",
+  "at marginal rate", "overnight with it", "deposit facility usage", "marginal lending facility",
 ];
 // Non-US economic data is skipped, but geopolitics about these countries (e.g. China/Taiwan) still goes through
 const NON_US = [

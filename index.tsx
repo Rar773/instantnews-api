@@ -191,6 +191,9 @@ const SKIP = [
 const MAG7 = /\$(AAPL|MSFT|NVDA|GOOGL?|AMZN|META|TSLA)\b|\b(Apple|Microsoft|Nvidia|Alphabet|Google|Amazon|Meta|Tesla)\b/i;
 // Market-moving words: a speaker who has already been quoted several times still gets through with these
 const MOVERS = /\b(hike|hikes|hiking|cut|cuts|cutting|recession|intervention|intervene|emergency|QE|tightening|easing|tariffs?|sanctions?|war|ceasefire|default|downgrade|upgrade)\b/i;
+const FOREIGN_LEADER = /\b(Merz|Starmer|Macron|Meloni|S[aá]nchez|Carney|Albanese|Ishiba|Takaichi|Lee Jae[- ]myung|Luxon|Tusk|Orb[aá]n|Fico|Babi[sš]|Frederiksen|Kristersson|Schoof|De Wever|Costa|Mitsotakis|Montenegro|Reeves|Lombard)\b/i;
+// a foreign leader on war, Russia/China/Iran, trade, the US, markets or a government crisis still always goes through
+const LEADER_KEEP = /\b(Russia|Russian|Putin|Ukrain\w*|Zelensk\w*|war|attack|strike|drones?|missiles?|NATO|troops|military|defen[cs]e|nuclear|China|Chinese|Xi|Iran|Israel|Gaza|trade|tariffs?|United States|America|Trump|Washington|Fed|dollar|oil|gas|energy|bonds?|yields?|markets?|election|resign\w*|no[- ]confidence|collapse)\b/i;
 const SPEAKER_CAP = Number(E.SPEAKER_CAP || 2); // quotes per speaker per hour before only market-moving lines pass
 const SPEAKER_CAP_FOREIGN_CB = Number(E.SPEAKER_CAP_FOREIGN_CB || 1); // BoE/BoC/ECB/BoJ… officials matter less to US traders
 const FOREIGN_CB = /^(BoE|BoC|ECB|BoJ|RBA|RBNZ|SNB|PBoC|Riksbank|Norges|Bank of (England|Canada|Japan))\b/i;
@@ -224,6 +227,15 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
     if (/\bQatar ?Energy\b/i.test(title) && /\b(MoUs?|memorandum|partners?|partnership|explore|joint projects?|ties)\b/i.test(title)) return "energy MoU";
     // Fitch notes on foreign issuers (bank notes, regional outlooks); US/Treasury ratings and down/upgrades stay
     if (/\bFitch\b/i.test(title) && !/\b(U\.?S\.?|United States|America|Treasury)\b/i.test(title) && !/\b(downgrad|upgrad|default|cuts?\b|negative|watch)/i.test(title)) return "foreign rating note";
+  }
+  // foreign heads of government talking domestic politics (Merz on the German budget: 4+ lines in a morning).
+  // Their titles often have no "Name:" prefix ("GERMAN CHANCELLOR MERZ SAYS …"), so speakerOf() misses them.
+  const leader = !highAlert && title.match(FOREIGN_LEADER)?.[1]?.toLowerCase().replace(/\s+/g, " ");
+  if (leader && !LEADER_KEEP.test(title) && !/\b(U\.S\.?|US|USA)\b/.test(title) && !MOVERS.test(title)) {
+    if (/\bbudgets?\b/i.test(title)) return "foreign budget talk";
+    const lt = (speakerLog.get("leader:" + leader) || []).filter((t) => now - t < 60 * 60_000);
+    if (lt.length >= SPEAKER_CAP) { speakerLog.set("leader:" + leader, lt); return "speaker cap (" + leader + ")"; }
+    lt.push(now); speakerLog.set("leader:" + leader, lt);
   }
   const sp = speakerOf(title);
   // Mag 7 headlines are never capped ("Amazon: …" product news was cut by the speaker cap)

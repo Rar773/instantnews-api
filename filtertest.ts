@@ -28,6 +28,15 @@ const cases: [string, boolean][] = [
   ["Taiwanese Equities Extend Losses, Falling Over 8%", false],
   ["U.S. Stock Futures Decline, With Nasdaq Down 1.1% and S&P 500 Off 0.6%", false],
   ["Peru imposes sanctions on Venezuela", false],
+  ["GERMANY'S MERZ ON BUDGET NEGOTIATIONS: NO CALCULATOR CAN WORK OUT ABSOLUTE FAIRNESS", true],
+  ["Merz says 2027 budget is far from solving all problems, but course change has begun", true],
+  ["GERMANY'S MERZ ON EUROPEAN BUDGET NEGOTIATIONS: IF THE IMPRESSION AROSE THAT I THINK WE SPEND TOO MUCH", true],
+  ["GERMAN CHANCELLOR MERZ SAYS RUSSIA IS ESCALATING, EUROPE MUST SHOW RUSSIA ITS LIMITS", false],
+  ["Merz says EU will respond to US tariffs on cars", false],
+  ["Starmer: UK budget will include cuts to spending", false],
+  ["Merz says Germany wants closer ties with the US", false],
+  ["Merz says budget talks will continue with us next week", true],
+  ["Macron calls snap election after budget defeat, French bonds slide", false],
   ["Xi, Pakistan's President Mark Joint Astronaut Mission With Messages of Congratulations", true],
   ["XI SAYS CHINA-PAKISTAN ASTRONAUT MISSION REFLECTS LONG-STANDING TIES", true],
   ["Xi Pledges Stronger Space Ties With Pakistan and Other Countries", true],
@@ -53,4 +62,9 @@ if (!capped[3]) { bad++; console.log("FAIL non-Mag7 speaker cap no longer works"
 // channel handle tags are removed from reposted text
 for (const [raw, want] of [["MERZ SAYS RUSSIA WANTS MORE THAN UKRAINE (@FirstSquaw)", "MERZ SAYS RUSSIA WANTS MORE THAN UKRAINE"], ["NVDA UP 3%\n(@FirstSquaw)", "NVDA UP 3%"], ["CONTACT fed@x.com FOR DETAILS", "CONTACT fed@x.com FOR DETAILS"]] as const)
   if (m.cleanChannelText(raw).text !== want) { bad++; console.log("FAIL handle strip |", raw); }
+// foreign leader barrage: max SPEAKER_CAP non-war lines per hour, war/trade lines always pass
+const t1 = Date.now() + 9e10;
+const lead = [0, 1, 2].map((i) => m.noiseReason(`MERZ SAYS EUROPE IS OUR WIDER CULTURAL HOME PART ${i}`, false, t1 + i));
+if (!lead[2] || lead[0] || lead[1]) { bad++; console.log("FAIL leader cap", lead); }
+if (m.noiseReason("MERZ SAYS RUSSIA IS ESCALATING AGAIN", false, t1 + 5)) { bad++; console.log("FAIL leader war line capped"); }
 console.log(bad ? `${bad} failures` : "all filter cases OK"); if (bad) process.exit(1);

@@ -939,7 +939,7 @@ function onChannelMessage(msg: any) {
   const chat = msg.chat;
   const uname = String(chat?.username || "").toLowerCase();
   if (!TG_SOURCES.includes(uname) && !TG_SOURCES.includes(String(chat?.id))) return;
-  if (blockedSources.has(uname) || chat?.isFake || chat?.isScam) return; // impersonation channel
+  if (blockedSources.has(uname) || ((chat?.isFake || chat?.isScam) && !TG_TRUSTED.includes(uname))) return; // impersonation channel
   userbot.received++;
   if (msg.groupedId) { // album: wait until all parts arrive, then post once
     const k = `${chat.id}:${msg.groupedId}`;
@@ -979,12 +979,14 @@ async function processChannelPost(msgs: any[]) {
 }
 
 const blockedSources = new Set<string>();
+// channels the owner explicitly chose to keep even though Telegram flags them (TG_TRUSTED=name1,name2)
+const TG_TRUSTED = (E.TG_TRUSTED || "").split(",").map((s) => s.trim().replace(/^@/, "").toLowerCase()).filter(Boolean);
 async function attachUserbot() {
   const c = client();
   for (const ch of TG_SOURCES) {
     const chat: any = await c.joinChat(ch).catch((e: any) => { log("join failed", ch, String(e?.message || e)); return null; });
     // Telegram marks impersonation channels as FAKE / SCAM — never repost from them
-    if (chat && (chat.isFake || chat.isScam)) {
+    if (chat && (chat.isFake || chat.isScam) && !TG_TRUSTED.includes(ch.toLowerCase())) {
       blockedSources.add(ch.toLowerCase());
       log("source blocked (Telegram marks it as", chat.isScam ? "SCAM" : "FAKE", "):", ch);
       await adminSay(`⚠️ Kanál @${ch} je v Telegrame označený ako ${chat.isScam ? "PODVOD" : "FALOŠNÝ"} — správy z neho NEPOSIELAM. Vyhoď ho z TG_SOURCES v Railway.`);

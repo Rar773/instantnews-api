@@ -207,6 +207,11 @@ export function speakerOf(title: string) {
   const words = m[1].replace(/[’']s\b/g, "").split(/\s+/).filter((w) => /^[A-Za-z][A-Za-z.\-]*$/.test(w));
   return words.length ? words[words.length - 1].toLowerCase() : null;
 }
+// is a channel-flagged 🚨 headline worth a HIGH ALERT? our own alert words, policy moves, Mag 7, or US markets/macro/geopolitics
+const ALERT_TOPICS = /\b(Fed|FOMC|Powell|Warsh|Treasury|Treasuries|Nasdaq|S&P|Dow|NQ|stocks?|futures|yields?|dollar|oil|crude|Brent|WTI|OPEC|gold|bitcoin|BTC|crypto|Trump|White House|Congress|Pentagon|U\.S\.?|US|USA|United States|America|Iran|Israel|Hormuz|Taiwan|NATO|missiles?|drones?|strikes?|attacks?|troops|military)\b/i;
+export function alertWorthy(title: string) {
+  return HIGH_ALERT_RE.test(title) || MOVERS.test(title) || MAG7.test(title) || ALERT_TOPICS.test(title);
+}
 // Extra noise filter on top of classify(): analyst price targets outside Mag 7, and long speech barrages from one speaker
 export function noiseReason(title: string, highAlert: boolean, now = Date.now()): string | null {
   if (/target price|price target/i.test(title) && !MAG7.test(title)) return "price target";
@@ -229,6 +234,8 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
     if (/\bOfcom\b/i.test(title) && /\b(seeks? views|consult\w*|call for evidence)\b/i.test(title) && !MAG7.test(title) && !/\b(fines?d?|probe|investigat\w*|Musk|TikTok)\b/i.test(title)) return "UK regulator consultation";
     // QatarEnergy MoUs / partnership talks (2×) — production cuts, LNG force majeure or outages still pass
     if (/\bQatar ?Energy\b/i.test(title) && /\b(MoUs?|memorandum|partners?|partnership|explore|joint projects?|ties)\b/i.test(title)) return "energy MoU";
+    // Russia's weekly/monthly inflation prints — no impact on US markets; rate decisions, oil/gas, sanctions still pass
+    if (/\bRussia(n|[’']s)?\b/i.test(title) && /\b(inflation|CPI|consumer prices)\b/i.test(title) && !MOVERS.test(title) && !/\b(oil|gas|crude|ruble|rouble|rate decision|key rate)\b/i.test(title)) return "Russia inflation";
     // "WH Sr. Adviser Hassett's interview on Fox Business ends." — end of a TV interview says nothing; Fed/Powell lines stay
     if (/\binterview\b/i.test(title) && /\b(ends|ended|concludes|concluded|is over|wraps up)\b/i.test(title) && !/\b(Fed|FOMC|Powell)\b/i.test(title)) return "interview ends";
     // Fitch notes on foreign issuers (bank notes, regional outlooks); US/Treasury ratings and down/upgrades stay
@@ -646,11 +653,12 @@ export function stripAttribution(line: string) {
 async function handleItem(it: Item, opts: ItemOpts = {}) {
   const via = opts.via || "feed";
   const c = classify(it);
-  if (opts.alert) c.highAlert = true;
+  // a channel's own 🚨/BREAKING only counts when the headline is market-moving for US traders (marketsAlpha put 🚨 on Russia's weekly CPI)
+  if (opts.alert && (!via.startsWith("tg:") || alertWorthy(it.title))) c.highAlert = true;
   if (mem.kv.get("paused") === "1" && via !== "test") return log("paused, not posting:", it.title.slice(0, 80));
   if (c.skip) { stats.skipped++; return log("skip", c.reason, "|", it.title.slice(0, 90)); }
   if (c.kind !== "imbalance" && c.kind !== "cftc" && via !== "test" && isDuplicateStory(it.title, via)) { stats.skipped++; return log("duplicate story", `(${via})`, it.title.slice(0, 90)); }
-  const noise = c.kind === "news" && via !== "test" ? noiseReason(it.title, c.highAlert || !!opts.alert) : null;
+  const noise = c.kind === "news" && via !== "test" ? noiseReason(it.title, c.highAlert) : null;
   if (noise) { stats.skipped++; return log("skip", noise, "|", it.title.slice(0, 90)); }
   // feed headlines end with their outlet too ("… - Chosun", "… - Source"): drop it, Marian wants no sources in posts
   if (!via.startsWith("tg:") && c.kind === "news") it = { ...it, title: stripAttribution(it.title) };

@@ -58,6 +58,10 @@ const cases: [string, boolean][] = [
   ["Ofcom opens investigation into TikTok", false],
   ["Amazon: used cars from dealers to be offered at launch of Amazon Autos", false],
   ["WH Sr. Adviser Hassett's interview on Fox Business ends.", true],
+  ["Russia's inflation rate for the week of November 17 to 23 reached 0.3%, with prices rising 6.1% since the start of the year", true],
+  ["Russian central bank cuts key rate to 15% as inflation slows", false],
+  ["Russian oil output falls 2% in October", false],
+  ["Russia launches massive drone attack on Kyiv", false],
   ["Powell's interview with CBS ends", false],
   ["Hassett: interview with Fox to be aired tonight", false],
 ];
@@ -76,6 +80,9 @@ if (!capped[3]) { bad++; console.log("FAIL non-Mag7 speaker cap no longer works"
 const t2 = Date.now() + 7e10;
 const hs = ["WH Sr. Adviser Hassett: Oil heading back to pre-war levels.", "WH Sr. Adviser Hassett: The fundamentals are very strong.", "WH Sr. Adviser Hassett: We expect Warsh, and the Fed will be data-driven.", "WH Sr. Adviser Hassett: We're in a Goldilocks economy."].map((t, i) => m.noiseReason(t, false, t2 + i));
 if (hs[2] || !hs[3]) { bad++; console.log("FAIL Fed line speaker cap", hs); }
+// a channel's 🚨 only makes a HIGH ALERT for market-moving headlines
+for (const [t, want] of [["Russia's inflation rate for the week of November 17 to 23 reached 0.3%", false], ["Peru's central bank keeps outlook unchanged", false], ["Nasdaq 100 enters bear market", true], ["Iran says tanker hit a mine in Hormuz", true], ["Nvidia shares fall 8%", true], ["US 10-year yield jumps 15 bp", true], ["ECB raises rates by 25bp", true]] as const)
+  if (m.alertWorthy(t) !== want) { bad++; console.log("FAIL alertWorthy", want, "|", t); }
 // channel handle tags are removed from reposted text
 for (const [raw, want] of [["MERZ SAYS RUSSIA WANTS MORE THAN UKRAINE (@FirstSquaw)", "MERZ SAYS RUSSIA WANTS MORE THAN UKRAINE"], ["NVDA UP 3%\n(@FirstSquaw)", "NVDA UP 3%"], ["CONTACT fed@x.com FOR DETAILS", "CONTACT fed@x.com FOR DETAILS"]] as const)
   if (m.cleanChannelText(raw).text !== want) { bad++; console.log("FAIL handle strip |", raw); }

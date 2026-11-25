@@ -590,12 +590,15 @@ const stats = { started: new Date().toISOString(), polls: 0, http429: 0, lastPol
 
 // fuzzy duplicate check across all sources (FJ RSS + Telegram channels): same story, different wording
 const STOP = new Set("the a an and or of to in on for at by with from as is are was were be been it its this that says said say will would after over amid into than per via has have had not no new just breaking report reports reported according source sources".split(" "));
-const recent: { tokens: Set<string>; ts: number; src: string; data?: boolean }[] = [];
+const recent: { tokens: Set<string>; ts: number; src: string; data?: boolean; tickers?: Set<string> }[] = [];
 const toks = (s: string) => new Set(norm(s).split(" ").filter((w) => w.length > 2 && !STOP.has(w)));
 // Only compares across DIFFERENT sources: items from one source are already de-duplicated by id, and similar-looking
 // lines from the same source are usually separate facts (CPI MoM vs CPI YoY, initial vs continuing claims, two Fed speakers).
+const OUTLET_WORDS = new Set("reuters rtrs bloomberg bbg wsj cnbc axios nyt politico semafor tass ria irib fars tasnim xinhua nikkei kyodo yonhap nbc cbs abc cnn fox bbc mni barron interview exclusive".split(" "));
+const tickersOf = (s: string) => new Set((s.match(/\$[A-Z]{1,6}\b/g) || []).map((x) => x.toUpperCase()));
 export function isDuplicateStory(text: string, src = "feed", now = Date.now()) {
-  const t = toks(text);
+  const t = new Set([...toks(text)].filter((w) => !OUTLET_WORDS.has(w))); // "- CNBC" on one version must not hide the match
+  const tk = tickersOf(text);
   const isData = /\bActual\b/.test(text);
   while (recent.length && now - recent[0].ts > 90 * 60_000) recent.shift();
   if (t.size < 3) return false;
@@ -604,10 +607,12 @@ export function isDuplicateStory(text: string, src = "feed", now = Date.now()) {
     for (const w of t) if (r.tokens.has(w)) inter++;
     const overlap = inter / Math.min(t.size, r.tokens.size);
     if (r.src !== src && overlap >= 0.7 && inter >= 4) return true;
+    // same company ($TICKER on both) from another source within 30 min, clearly the same story told in other words
+    if (r.src !== src && tk.size && [...tk].some((x) => r.tickers?.has(x)) && overlap >= 0.5 && inter >= 4 && now - r.ts < 30 * 60_000) return true;
     // same source repeating itself (e.g. 6 WSJ tariff lines in 3 minutes) — never for data lines like CPI MoM/YoY
     if (r.src === src && !isData && !r.data && overlap >= 0.8 && inter >= 4 && now - r.ts < 15 * 60_000) return true;
   }
-  recent.push({ tokens: t, ts: now, src, data: isData });
+  recent.push({ tokens: t, ts: now, src, data: isData, tickers: tk });
   return false;
 }
 
@@ -624,7 +629,7 @@ export async function rewriteChannelPost(title: string, content: string): Promis
     `Rewrite this breaking financial news item in your own words for a fast news feed.
 Rules: keep every fact, number, percentage, price, name and $TICKER exactly; remove any source or outlet attribution (e.g. "- Reuters", "per WSJ", "according to Bloomberg", "citing sources", "reports say") and any channel name; do not add facts, opinions, emoji, hashtags or links; do not mention Telegram or who posted it; keep it about as short as the original; first line is the headline, any extra detail on the next lines; English only. Output only the rewritten text.
 
-${original}`, 300, 3500);
+${original}`, 400, original.length > 200 ? 6000 : 3500);
   if (!out) return null;
   const clean = out.replace(/^["“]|["”]$/g, "").trim();
   // safety: every number of the original must still be there, otherwise keep the original wording
@@ -650,6 +655,29 @@ export function stripAttribution(line: string) {
   for (let i = 0; i < 2; i++) out = out.replace(ATTRIB_RE, "").replace(reportsRe, "").replace(/\s*\((?:Reuters|Bloomberg|AP|AFP|WSJ|CNBC)\)\s*$/i, "").trim();
   return out || line.trim();
 }
+// Fallback when the rewrite is not available: "$NVDA  - NVIDIA CHIP SELLERS SCRAMBLE…" -> "Nvidia Chip Sellers Scramble… $NVDA"
+const SMALL = new Set("a an the and or but for nor as at by in of on to up off out via per with from into over amid after is are was were be its it new not has had all can may who how why".split(" "));
+const ACRONYMS = new Set("OPEC NATO IRGC NYSE FOMC SPDR NASA OECD ASEAN BRICS LVMH ARM TSMC IAEA OPEC+ UAE USA".split(" "));
+export function tidyHeadline(h: string) {
+  let s = h.trim();
+  const lead = s.match(/^((?:\$[A-Z]{1,6}\s*)+)[-–—:]\s*/);
+  if (lead) s = s.slice(lead[0].length) + " " + lead[1].trim();
+  const letters = s.replace(/[^A-Za-z]/g, "");
+  if (letters.length < 12 || letters.replace(/[^A-Z]/g, "").length / letters.length < 0.8) return s; // not shouting
+  return s.split(/(\s+)/).map((w, i) => {
+    if (/^\s+$/.test(w) || w.startsWith("$") || ACRONYMS.has(w)) return w;
+    const core = w.replace(/[^A-Za-z]/g, "");
+    if (core.length <= 3 && !SMALL.has(core.toLowerCase())) return w; // AI, US, GPU, CEO, ECB stay upper
+    const lw = w.toLowerCase();
+    if (i > 0 && SMALL.has(core.toLowerCase())) return lw;
+    return lw.replace(/[a-z]/, (c) => c.toUpperCase());
+  }).join("");
+}
+// "According to CNBC's sources, an unusually…" -> "An unusually…"
+export function dropInlineSource(line: string) {
+  let s = line.replace(/^(?:according to|citing|per)\s+[^,]{1,50},\s*/i, "").replace(/,?\s*(?:according to|citing)\s+[^,.]{1,50}(?=[,.]|$)/gi, "");
+  return s ? s[0].toUpperCase() + s.slice(1) : s;
+}
 async function handleItem(it: Item, opts: ItemOpts = {}) {
   const via = opts.via || "feed";
   const c = classify(it);
@@ -666,7 +694,7 @@ async function handleItem(it: Item, opts: ItemOpts = {}) {
     const rw = await rewriteChannelPost(it.title, it.content);
     if (rw?.title) it = { ...it, title: rw.title, content: rw.content };
     // rewrite failed or was rejected (numbers changed): still drop "- Reuters", "per WSJ"… from the original wording
-    else it = { ...it, title: stripAttribution(it.title), content: it.content.split("\n").map(stripAttribution).join("\n").trim() };
+    else it = { ...it, title: tidyHeadline(stripAttribution(it.title)), content: it.content.split("\n").map((l) => dropInlineSource(stripAttribution(l))).join("\n").trim() };
   }
   const credit = opts.sourceName && CHANNEL_CREDIT ? `\n\nSource: ${opts.sourceName}` : ""; // optional source line at the very bottom
   const latency = Math.round((Date.now() - it.pubDate) / 1000);

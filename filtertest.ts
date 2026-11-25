@@ -50,4 +50,7 @@ const t0 = Date.now() + 5e10;
 for (let i = 0; i < 4; i++) if (m.noiseReason(`Amazon: Autos detail ${i}`, false, t0 + i)) { bad++; console.log("FAIL Mag7 speaker capped", i); }
 const capped = [0, 1, 2, 3].map((i) => m.noiseReason(`Lagarde: remark ${i}`, false, t0 + i));
 if (!capped[3]) { bad++; console.log("FAIL non-Mag7 speaker cap no longer works"); }
+// channel handle tags are removed from reposted text
+for (const [raw, want] of [["MERZ SAYS RUSSIA WANTS MORE THAN UKRAINE (@FirstSquaw)", "MERZ SAYS RUSSIA WANTS MORE THAN UKRAINE"], ["NVDA UP 3%\n(@FirstSquaw)", "NVDA UP 3%"], ["CONTACT fed@x.com FOR DETAILS", "CONTACT fed@x.com FOR DETAILS"]] as const)
+  if (m.cleanChannelText(raw).text !== want) { bad++; console.log("FAIL handle strip |", raw); }
 console.log(bad ? `${bad} failures` : "all filter cases OK"); if (bad) process.exit(1);

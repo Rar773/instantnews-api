@@ -611,7 +611,7 @@ ${original}`, 300, 3500);
 const OUTLETS = "Reuters|RTRS|Bloomberg|BBG|WSJ|Wall Street Journal|FT|Financial Times|CNBC|AP|AFP|Axios|NYT|New York Times|Politico|Semafor|Tass|TASS|RIA|IRIB|Fars|Tasnim|Xinhua|Nikkei|Kyodo|Yonhap|Al Arabiya|Al Jazeera|NBC|CBS|ABC|CNN|Fox|BBC|Sky|Dow Jones|MNI|Barron's|The Information|sources|officials";
 const ATTRIB_RE = new RegExp(String.raw`\s*(?:[-–—|]\s*|,?\s*\(?\s*(?:per|via|citing|according to|reports?|reported by|says)\s+)(?:${OUTLETS})(?:[^.\n]{0,40})?\)?\.?\s*$`, "i");
 export function stripAttribution(line: string) {
-  let out = line.trim();
+  let out = stripHandles(line.trim());
   const reportsRe = new RegExp(String.raw`,?\s*(?:${OUTLETS})\s+(?:reports?|reported|says|said)\.?\s*$`, "i");
   for (let i = 0; i < 2; i++) out = out.replace(ATTRIB_RE, "").replace(reportsRe, "").replace(/\s*\((?:Reuters|Bloomberg|AP|AFP|WSJ|CNBC)\)\s*$/i, "").trim();
   return out || line.trim();
@@ -903,8 +903,11 @@ const client = () => (tgc ||= ((globalThis as any).__tgc = new TelegramClient({ 
 
 const PROMO_RE = /(t\.me\/|https?:\/\/|join (us|our|now)|subscribe|follow us|turn on notifications|share this|^@\w+$|^➡️|^👉)/i;
 const LEAD_RE = /^(?:[🚨⚡️🔴🟥‼️❗🔥📢🇺🇸\s]|BREAKING|JUST IN|NEW|UPDATE|DEVELOPING|ALERT|FLASH)+[:\-—]?\s*/iu;
+// channel handle tags: "… UKRAINE (@FirstSquaw)", "via @FirstSquawk", a line that is only "@FirstSquaw"
+const HANDLE_RE = /\s*[([]\s*(?:via\s+)?@\w{3,}\s*[)\]]|\s*(?:[-–—|]\s*)?(?:via\s+)?@\w{3,}\s*$/gi;
+export function stripHandles(line: string) { return line.replace(HANDLE_RE, "").trim(); }
 export function cleanChannelText(raw: string) {
-  const lines = raw.split("\n").map((l) => l.trim()).filter((l) => l && !PROMO_RE.test(l));
+  const lines = raw.split("\n").map((l) => stripHandles(l.trim())).filter((l) => l && !PROMO_RE.test(l));
   if (!lines.length) return { text: "", alert: false };
   const alert = /^\s*(?:🚨|‼️|BREAKING)/iu.test(lines[0]);
   lines[0] = lines[0].replace(LEAD_RE, "").trim();

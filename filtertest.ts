@@ -13,6 +13,21 @@ const cases: [string, boolean][] = [
   ["Powell press conference ends", false],
   ["Nvidia expects record revenue $NVDA", false],
   ["IRGC Navy: A fourth oil tanker exploded after striking a sea mine", false],
+  ["Peru’s Economy Ministry Revises 2026 Growth Outlook Downward to 3.1% From 3.4%", true],
+  ["Peru Narrows 2026 Fiscal Deficit Forecast by 0.6 Percentage Points to 1.2% of GDP", true],
+  ["China’s Benchmark Coking Coal Contract Rallies Over 3%", true],
+  ["Most Active China Coke Futures Jump 4.1% to 2,043 Yuan Per Metric Ton, Highest Since Octob", true],
+  ["Shenzhou-24 Crew Successfully Boards Tiangong Space Station, Chinese Media Says", true],
+  ["Bank of China’s Proposed Luxembourg Branch MTN Notes Receive ‘A(EXP)’ Rating From Fitch", true],
+  ["Fitch Ratings Highlights Strong Economic Conditions as a Key Support for Vietnam's Major B", true],
+  ["Fitch downgrades United States credit rating to AA", false],
+  ["Fitch downgrades France to A+", false],
+  ["Coca-Cola (Coke) beats earnings estimates $KO", false],
+  ["Oil Futures Decline, With Brent and U.S. Crude Both Down Over $1", false],
+  ["China Iron Ore Futures Plunge as Beijing Announces Steel Output Curbs", false],
+  ["Taiwanese Equities Extend Losses, Falling Over 8%", false],
+  ["U.S. Stock Futures Decline, With Nasdaq Down 1.1% and S&P 500 Off 0.6%", false],
+  ["Peru imposes sanctions on Venezuela", false],
 ];
 let bad = 0;
 for (const [t, want] of cases) {

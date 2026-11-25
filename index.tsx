@@ -211,6 +211,16 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
   if (/\bsettle[sd]?\b/i.test(title) && /futures/i.test(title) && !/\b(WTI|Crude|Gold)\b/i.test(title)) return "minor settlement";
   // bank/broker calls on a FOREIGN central bank ("BMO expects Bank of Canada to hike", "Nomura: We see the BOC to hike") — Fed calls stay
   if (!highAlert && BROKER_CALL.test(title) && FOREIGN_CB_ANY.test(title) && !FOREIGN_CB.test(title) && !/\b(Fed|FOMC|Powell)\b/.test(title)) return "foreign CB broker call";
+  if (!highAlert) {
+    // Peru ministry growth/deficit forecasts (4× in one night) — no impact on US markets
+    if (/\bPeru(vian)?\b|\bPeru[’']s\b/i.test(title) && /\b(growth|deficit|GDP|forecast|outlook|projection)\b/i.test(title)) return "minor EM forecast";
+    // China coke / coking coal futures moves (4× in one night)
+    if (/\bcok(e|ing coal)\b/i.test(title) && /\b(Chin|Dalian)/i.test(title) && /\b(contract|futures)\b/i.test(title)) return "China coke futures";
+    // Chinese space-program updates
+    if (/\b(Shenzhou|Tiangong)\b/i.test(title)) return "space mission";
+    // Fitch notes on foreign issuers (bank notes, regional outlooks); US/Treasury ratings and down/upgrades stay
+    if (/\bFitch\b/i.test(title) && !/\b(U\.?S\.?|United States|America|Treasury)\b/i.test(title) && !/\b(downgrad|upgrad|default|cuts?\b|negative|watch)/i.test(title)) return "foreign rating note";
+  }
   const sp = speakerOf(title);
   if (!sp || highAlert || ALWAYS_ALLOW.some((k) => title.toLowerCase().includes(k))) return null;
   const times = (speakerLog.get(sp) || []).filter((t) => now - t < 60 * 60_000);

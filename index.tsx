@@ -622,7 +622,8 @@ type ItemOpts = { via?: string; sourceName?: string; media?: Media | null; alert
 // CHANNEL_REWRITE=off turns rewording off; CHANNEL_CREDIT=on adds the source line back.
 const CHANNEL_REWRITE = (E.CHANNEL_REWRITE || "on").toLowerCase() !== "off";
 const CHANNEL_CREDIT = (E.CHANNEL_CREDIT || "off").toLowerCase() === "on";
-const nums = (s: string) => (s.match(/\d+(?:[.,]\d+)*/g) || []).map((n) => n.replace(/,/g, ""));
+// numbers compared by value: "83.50" = "83.5", "1,250" = "1250"
+const nums = (s: string) => (s.match(/\d+(?:[.,]\d+)*/g) || []).map((n) => { const v = n.replace(/,/g, ""); return v.includes(".") ? v.replace(/0+$/, "").replace(/\.$/, "") : v; });
 export async function rewriteChannelPost(title: string, content: string): Promise<{ title: string; content: string } | null> {
   const original = content ? `${title}\n${content}` : title;
   const out = await claude(

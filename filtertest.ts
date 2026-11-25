@@ -64,6 +64,18 @@ const cases: [string, boolean][] = [
   ["Russia launches massive drone attack on Kyiv", false],
   ["Powell's interview with CBS ends", false],
   ["Hassett: interview with Fox to be aired tonight", false],
+  // Russian domestic business news is noise; war, sanctions, energy, CBR, Putin and US angles still pass
+  ["🇷🇺 Levan Nazarov, founder of the fintech group \"Balance-Platform,\" has consolidated a single stake", true],
+  ["Russia-Kazakhstan trade nears $30 billion, 96% in national currencies", true],
+  ["🇷🇺 MGKL Climbs 12% Amid New Defaults", false], // matches HIGH_ALERT_RE -> never filtered, only not an ALERT
+  ["Russia warns NATO over Baltic exercises", false],
+  ["Russia expels two diplomats", false],
+  ["Russian Diesel Exports Hit Highest Level Since June", false],
+  ["Lukoil International is set to be fully acquired by the Boeli consortium", false],
+  ["🇷🇺 Putin says Russia is ready to meet Trump", false],
+  ["Russia and US agree on new round of peace talks", false],
+  ["Russian central bank holds key rate at 16%", false],
+  ["🇷🇺 Sberbank hit by new EU sanctions", false],
 ];
 let bad = 0;
 for (const [t, want] of cases) {
@@ -83,6 +95,18 @@ if (hs[2] || !hs[3]) { bad++; console.log("FAIL Fed line speaker cap", hs); }
 // a channel's 🚨 only makes a HIGH ALERT for market-moving headlines
 for (const [t, want] of [["Russia's inflation rate for the week of November 17 to 23 reached 0.3%", false], ["Peru's central bank keeps outlook unchanged", false], ["Nasdaq 100 enters bear market", true], ["Iran says tanker hit a mine in Hormuz", true], ["Nvidia shares fall 8%", true], ["US 10-year yield jumps 15 bp", true], ["ECB raises rates by 25bp", true]] as const)
   if (m.alertWorthy(t) !== want) { bad++; console.log("FAIL alertWorthy", want, "|", t); }
+for (const [t, want] of [["🇷🇺 MGKL Climbs 12% Amid New Defaults", false], ["Headline: US Natural Gas Supplies Fall 24 BCF, Worse Than Expected", false], ["Russia declares war on Moldova", true], ["Russian missile strike hits Kyiv", true], ["US crude inventories fall 5M barrels, oil jumps", true], ["Coreweave Banks Prepare $4.5 Billion Loan Sale as Default Fears Surge $CRWV", true], ["Argentina defaults on bonds", true]] as const)
+  if (m.alertWorthy(t) !== want) { bad++; console.log("FAIL alertWorthy", want, "|", t); }
+if (m.classify(it("🇷🇺 MGKL Climbs 12% Amid New Defaults")).highAlert || !m.classify(it("Argentina defaults on bonds")).highAlert) { bad++; console.log("FAIL classify Russia-local alert"); }
+// same story worded with plural/singular differences is a duplicate; separate S&P follow-ups and outlet-only words still behave
+{
+  const T = Date.now() + 3e11;
+  if (m.isDuplicateStory("S&P puts Nvidia 'AA' ratings on creditwatch negative", "feed", T)) { bad++; console.log("FAIL dup first"); }
+  if (!m.isDuplicateStory("$NVDA: S&P Puts Nvidia's AA Rating on Watch for Possible Downgrade", "tg:WalterBloomberg", T + 150_000)) { bad++; console.log("FAIL dup plural"); }
+  if (m.isDuplicateStory("S&P intend to meet with Nvidia’s board & management. $NVDA", "feed", T + 300_000)) { bad++; console.log("FAIL dup follow-up"); }
+  if (m.isDuplicateStory("Fed's Waller says rate cuts remain on the table - Reuters", "feed", T + 1e9)) { bad++; console.log("FAIL dup reuters first"); }
+  if (!m.isDuplicateStory("FED'S WALLER SAYS RATE CUTS REMAIN ON THE TABLE", "tg:FirstSquawk", T + 1e9 + 60_000)) { bad++; console.log("FAIL dup outlet word"); }
+}
 // channel handle tags are removed from reposted text
 for (const [raw, want] of [["MERZ SAYS RUSSIA WANTS MORE THAN UKRAINE (@FirstSquaw)", "MERZ SAYS RUSSIA WANTS MORE THAN UKRAINE"], ["NVDA UP 3%\n(@FirstSquaw)", "NVDA UP 3%"], ["CONTACT fed@x.com FOR DETAILS", "CONTACT fed@x.com FOR DETAILS"]] as const)
   if (m.cleanChannelText(raw).text !== want) { bad++; console.log("FAIL handle strip |", raw); }

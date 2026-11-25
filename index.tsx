@@ -209,8 +209,17 @@ export function speakerOf(title: string) {
 }
 // is a channel-flagged 🚨 headline worth a HIGH ALERT? our own alert words, policy moves, Mag 7, or US markets/macro/geopolitics
 const ALERT_TOPICS = /\b(Fed|FOMC|Powell|Warsh|Treasury|Treasuries|Nasdaq|S&P|Dow|NQ|stocks?|futures|yields?|dollar|oil|crude|Brent|WTI|OPEC|gold|bitcoin|BTC|crypto|Trump|White House|Congress|Pentagon|U\.S\.?|US|USA|United States|America|Iran|Israel|Hormuz|Taiwan|NATO|missiles?|drones?|strikes?|attacks?|troops|military)\b/i;
+// Russian domestic business news (marketsAlpha: "🇷🇺 Levan Nazarov… fintech group", "Russia-Kazakhstan trade nears $30 billion", "MGKL climbs 12% amid defaults").
+// Anything about war/Ukraine/peace talks, sanctions, oil/gas, the CBR rate, Putin/Kremlin, the US/China/Europe or markets still counts.
+const RU_CONTEXT = /🇷🇺|\b(Russia|Russian|Russia[’']s|Moscow|MOEX|Sber|Sberbank|Kazakh\w*|Tokaev)\b/iu;
+const RU_KEEP = /\b(war|attack\w*|strikes?|drones?|missiles?|nuclear|weapons?|NATO|Ukrain\w*|Zelensk\w*|Kyiv|Belarus|peace|ceasefire|truce|negotiat\w*|talks|troops|military|army|sanction\w*|tariffs?|oil|gas|diesel|gasoline|fuel|crude|LNG|refiner\w*|pipelines?|energy|OPEC|grain|wheat|fertili[sz]ers?|ruble|rouble|key rate|rate decision|central bank|CBR|Nabiullina|Putin|Kremlin|Peskov|Lavrov|Medvedev|Trump|Witkoff|Rubio|Vance|U\.S\.?|US|USA|United States|America\w*|Washington|China|Chinese|Xi|Iran|India|Europe\w*|EU|gold|bitcoin|BTC|crypto|Lukoil|Rosneft|Gazprom|Novatek|Transneft|escalat\w*|threat\w*|retaliat\w*|respon\w*|warn\w*|border|invad\w*|security|defen[cs]e|diplomat\w*|embass\w*|spy|spies|cyber\w*|hack\w*|Moldova|Baltic\w*|Poland|Polish|Finland|German\w*|Britain|UK|France|French|Japan)\b/i;
+export function russiaLocal(title: string) { return RU_CONTEXT.test(title) && !RU_KEEP.test(title) && !MOVERS.test(title) && !MAG7.test(title) && !FOREIGN_LEADER.test(title); }
+// weekly natural-gas storage ("US Natural Gas Supplies Fall 24 BCF") is routine data, never a HIGH ALERT on a channel's 🚨 alone
+const ROUTINE_ALERT = /\b(BCF|natural gas (?:storage|supplies|inventor\w*|stocks))\b/i;
 export function alertWorthy(title: string) {
-  return HIGH_ALERT_RE.test(title) || MOVERS.test(title) || MAG7.test(title) || ALERT_TOPICS.test(title);
+  if (HIGH_ALERT_RE.test(title) && !russiaLocal(title)) return true;
+  if (russiaLocal(title) || ROUTINE_ALERT.test(title)) return false;
+  return MOVERS.test(title) || MAG7.test(title) || ALERT_TOPICS.test(title);
 }
 // Extra noise filter on top of classify(): analyst price targets outside Mag 7, and long speech barrages from one speaker
 export function noiseReason(title: string, highAlert: boolean, now = Date.now()): string | null {
@@ -236,6 +245,8 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
     if (/\bQatar ?Energy\b/i.test(title) && /\b(MoUs?|memorandum|partners?|partnership|explore|joint projects?|ties)\b/i.test(title)) return "energy MoU";
     // Russia's weekly/monthly inflation prints — no impact on US markets; rate decisions, oil/gas, sanctions still pass
     if (/\bRussia(n|[’']s)?\b/i.test(title) && /\b(inflation|CPI|consumer prices)\b/i.test(title) && !MOVERS.test(title) && !/\b(oil|gas|crude|ruble|rouble|rate decision|key rate)\b/i.test(title)) return "Russia inflation";
+    // Russian domestic business/trade news with no war, sanctions, energy, CBR or US/China angle (3× in one evening)
+    if (russiaLocal(title) && !HIGH_ALERT_RE.test(title)) return "Russia local";
     // "WH Sr. Adviser Hassett's interview on Fox Business ends." — end of a TV interview says nothing; Fed/Powell lines stay
     if (/\binterview\b/i.test(title) && /\b(ends|ended|concludes|concluded|is over|wraps up)\b/i.test(title) && !/\b(Fed|FOMC|Powell)\b/i.test(title)) return "interview ends";
     // Fitch notes on foreign issuers (bank notes, regional outlooks); US/Treasury ratings and down/upgrades stay
@@ -301,7 +312,8 @@ export function classify(it: Item): Classified {
   if (/\bEPS\b|\bRevenue\b|\bearnings\b|\bguidance\b|Q[1-4] (?:results|earnings|sales)/i.test(full) && /\$[A-Z]{1,5}\b|\bEPS\b/.test(full)) kind = "earnings";
   else if (/\bauction\b|bid[- ]to[- ]cover/i.test(full)) kind = "auction";
   else if (/\bActual\b/i.test(full) || (/\bForecast\b/i.test(full) && /\bPrevious\b/i.test(full))) kind = "economic";
-  return { skip: false, kind, highAlert: HIGH_ALERT_RE.test(t) };
+  // a Russian company's "defaults" (MGKL) still posts, but not as a HIGH ALERT
+  return { skip: false, kind, highAlert: HIGH_ALERT_RE.test(t) && !russiaLocal(t) };
 }
 
 // ---------------------------------------------------------------- Claude
@@ -591,14 +603,16 @@ const stats = { started: new Date().toISOString(), polls: 0, http429: 0, lastPol
 // fuzzy duplicate check across all sources (FJ RSS + Telegram channels): same story, different wording
 const STOP = new Set("the a an and or of to in on for at by with from as is are was were be been it its this that says said say will would after over amid into than per via has have had not no new just breaking report reports reported according source sources".split(" "));
 const recent: { tokens: Set<string>; ts: number; src: string; data?: boolean; tickers?: Set<string> }[] = [];
-const toks = (s: string) => new Set(norm(s).split(" ").filter((w) => w.length > 2 && !STOP.has(w)));
+// plural "s" dropped so "ratings"/"rating", "shares"/"share" match (S&P–Nvidia rating story went out twice)
+const stem = (w: string) => (w.length > 4 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
+const toks = (s: string) => new Set(norm(s).split(" ").filter((w) => w.length > 2 && !STOP.has(w)).map(stem));
 // Only compares across DIFFERENT sources: items from one source are already de-duplicated by id, and similar-looking
 // lines from the same source are usually separate facts (CPI MoM vs CPI YoY, initial vs continuing claims, two Fed speakers).
 const OUTLET_WORDS = new Set("reuters rtrs bloomberg bbg wsj cnbc axios nyt politico semafor tass ria irib fars tasnim xinhua nikkei kyodo yonhap nbc cbs abc cnn fox bbc mni barron interview exclusive".split(" "));
 const COMPANY_TICKER: [string, string][] = [["nvidia", "nvda"], ["apple", "aapl"], ["microsoft", "msft"], ["tesla", "tsla"], ["amazon", "amzn"], ["alphabet", "googl"], ["google", "googl"], ["meta", "meta"], ["netflix", "nflx"], ["broadcom", "avgo"], ["intel", "intc"], ["anthropic", "ant"], ["openai", "openai"]];
 const tickersOf = (s: string) => new Set((s.match(/\$[A-Z]{1,6}\b/g) || []).map((x) => x.toUpperCase()));
 export function isDuplicateStory(text: string, src = "feed", now = Date.now()) {
-  const t = new Set([...toks(text)].filter((w) => !OUTLET_WORDS.has(w))); // "- CNBC" on one version must not hide the match
+  const t = new Set([...toks(text)].filter((w) => !OUTLET_WORDS.has(w) && !OUTLET_WORDS.has(w + "s"))); // "- CNBC" on one version must not hide the match
   for (const [name, tick] of COMPANY_TICKER) if (t.has(name)) t.add(tick); // "Nvidia" in one version, "$NVDA" in the other
   const tk = tickersOf(text);
   const isData = /\bActual\b/.test(text);

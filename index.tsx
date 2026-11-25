@@ -608,7 +608,7 @@ ${original}`, 300, 3500);
   return { title: stripAttribution(t), content: rest.map(stripAttribution).join("\n").trim() };
 }
 // safety net if the model leaves a trailing source: "… - Reuters", "… (Bloomberg)", "…, per WSJ", "…, citing sources"
-const OUTLETS = "Reuters|Bloomberg|WSJ|Wall Street Journal|FT|Financial Times|CNBC|AP|AFP|Axios|NYT|New York Times|Politico|Semafor|Tass|TASS|RIA|IRIB|Fars|Tasnim|Xinhua|Nikkei|Kyodo|Yonhap|Al Arabiya|Al Jazeera|NBC|CBS|ABC|CNN|Fox|BBC|Sky|Dow Jones|MNI|Barron's|The Information|sources|officials";
+const OUTLETS = "Reuters|RTRS|Bloomberg|BBG|WSJ|Wall Street Journal|FT|Financial Times|CNBC|AP|AFP|Axios|NYT|New York Times|Politico|Semafor|Tass|TASS|RIA|IRIB|Fars|Tasnim|Xinhua|Nikkei|Kyodo|Yonhap|Al Arabiya|Al Jazeera|NBC|CBS|ABC|CNN|Fox|BBC|Sky|Dow Jones|MNI|Barron's|The Information|sources|officials";
 const ATTRIB_RE = new RegExp(String.raw`\s*(?:[-–—|]\s*|,?\s*\(?\s*(?:per|via|citing|according to|reports?|reported by|says)\s+)(?:${OUTLETS})(?:[^.\n]{0,40})?\)?\.?\s*$`, "i");
 export function stripAttribution(line: string) {
   let out = line.trim();
@@ -628,6 +628,8 @@ async function handleItem(it: Item, opts: ItemOpts = {}) {
   if (via.startsWith("tg:") && CHANNEL_REWRITE && c.kind === "news") {
     const rw = await rewriteChannelPost(it.title, it.content);
     if (rw?.title) it = { ...it, title: rw.title, content: rw.content };
+    // rewrite failed or was rejected (numbers changed): still drop "- Reuters", "per WSJ"… from the original wording
+    else it = { ...it, title: stripAttribution(it.title), content: it.content.split("\n").map(stripAttribution).join("\n").trim() };
   }
   const credit = opts.sourceName && CHANNEL_CREDIT ? `\n\nSource: ${opts.sourceName}` : ""; // optional source line at the very bottom
   const latency = Math.round((Date.now() - it.pubDate) / 1000);

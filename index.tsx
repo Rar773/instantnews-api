@@ -591,7 +591,7 @@ export async function rewriteChannelPost(title: string, content: string): Promis
   const original = content ? `${title}\n${content}` : title;
   const out = await claude(
     `Rewrite this breaking financial news item in your own words for a fast news feed.
-Rules: keep every fact, number, percentage, price, name and $TICKER exactly; keep an outlet attribution that is part of the news (e.g. "- Reuters", "per WSJ"); do not add facts, opinions, emoji, hashtags or links; do not mention Telegram or who posted it; keep it about as short as the original; first line is the headline, any extra detail on the next lines; English only. Output only the rewritten text.
+Rules: keep every fact, number, percentage, price, name and $TICKER exactly; remove any source or outlet attribution (e.g. "- Reuters", "per WSJ", "according to Bloomberg", "citing sources", "reports say") and any channel name; do not add facts, opinions, emoji, hashtags or links; do not mention Telegram or who posted it; keep it about as short as the original; first line is the headline, any extra detail on the next lines; English only. Output only the rewritten text.
 
 ${original}`, 300, 3500);
   if (!out) return null;
@@ -600,7 +600,16 @@ ${original}`, 300, 3500);
   const have = new Set(nums(clean));
   if (nums(original).some((n) => !have.has(n))) { log("rewrite changed numbers, keeping original:", title.slice(0, 80)); return null; }
   const [t, ...rest] = clean.split("\n");
-  return { title: t.trim(), content: rest.join("\n").trim() };
+  return { title: stripAttribution(t), content: rest.map(stripAttribution).join("\n").trim() };
+}
+// safety net if the model leaves a trailing source: "… - Reuters", "… (Bloomberg)", "…, per WSJ", "…, citing sources"
+const OUTLETS = "Reuters|Bloomberg|WSJ|Wall Street Journal|FT|Financial Times|CNBC|AP|AFP|Axios|NYT|New York Times|Politico|Semafor|Tass|TASS|RIA|IRIB|Fars|Tasnim|Xinhua|Nikkei|Kyodo|Yonhap|Al Arabiya|Al Jazeera|NBC|CBS|ABC|CNN|Fox|BBC|Sky|Dow Jones|MNI|Barron's|The Information|sources|officials";
+const ATTRIB_RE = new RegExp(String.raw`\s*(?:[-–—|]\s*|,?\s*\(?\s*(?:per|via|citing|according to|reports?|reported by|says)\s+)(?:${OUTLETS})(?:[^.\n]{0,40})?\)?\.?\s*$`, "i");
+export function stripAttribution(line: string) {
+  let out = line.trim();
+  const reportsRe = new RegExp(String.raw`,?\s*(?:${OUTLETS})\s+(?:reports?|reported|says|said)\.?\s*$`, "i");
+  for (let i = 0; i < 2; i++) out = out.replace(ATTRIB_RE, "").replace(reportsRe, "").replace(/\s*\((?:Reuters|Bloomberg|AP|AFP|WSJ|CNBC)\)\s*$/i, "").trim();
+  return out || line.trim();
 }
 async function handleItem(it: Item, opts: ItemOpts = {}) {
   const via = opts.via || "feed";

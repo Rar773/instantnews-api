@@ -581,6 +581,27 @@ export function isDuplicateStory(text: string, src = "feed", now = Date.now()) {
 }
 
 type ItemOpts = { via?: string; sourceName?: string; media?: Media | null; alert?: boolean };
+
+// Posts from other Telegram channels are reworded (same facts, our own wording), so they go out without a "Source:" line.
+// CHANNEL_REWRITE=off turns rewording off; CHANNEL_CREDIT=on adds the source line back.
+const CHANNEL_REWRITE = (E.CHANNEL_REWRITE || "on").toLowerCase() !== "off";
+const CHANNEL_CREDIT = (E.CHANNEL_CREDIT || "off").toLowerCase() === "on";
+const nums = (s: string) => (s.match(/\d+(?:[.,]\d+)*/g) || []).map((n) => n.replace(/,/g, ""));
+export async function rewriteChannelPost(title: string, content: string): Promise<{ title: string; content: string } | null> {
+  const original = content ? `${title}\n${content}` : title;
+  const out = await claude(
+    `Rewrite this breaking financial news item in your own words for a fast news feed.
+Rules: keep every fact, number, percentage, price, name and $TICKER exactly; keep an outlet attribution that is part of the news (e.g. "- Reuters", "per WSJ"); do not add facts, opinions, emoji, hashtags or links; do not mention Telegram or who posted it; keep it about as short as the original; first line is the headline, any extra detail on the next lines; English only. Output only the rewritten text.
+
+${original}`, 300, 3500);
+  if (!out) return null;
+  const clean = out.replace(/^["“]|["”]$/g, "").trim();
+  // safety: every number of the original must still be there, otherwise keep the original wording
+  const have = new Set(nums(clean));
+  if (nums(original).some((n) => !have.has(n))) { log("rewrite changed numbers, keeping original:", title.slice(0, 80)); return null; }
+  const [t, ...rest] = clean.split("\n");
+  return { title: t.trim(), content: rest.join("\n").trim() };
+}
 async function handleItem(it: Item, opts: ItemOpts = {}) {
   const via = opts.via || "feed";
   const c = classify(it);
@@ -590,7 +611,11 @@ async function handleItem(it: Item, opts: ItemOpts = {}) {
   if (c.kind !== "imbalance" && c.kind !== "cftc" && via !== "test" && isDuplicateStory(it.title, via)) { stats.skipped++; return log("duplicate story", `(${via})`, it.title.slice(0, 90)); }
   const noise = c.kind === "news" && via !== "test" ? noiseReason(it.title, c.highAlert || !!opts.alert) : null;
   if (noise) { stats.skipped++; return log("skip", noise, "|", it.title.slice(0, 90)); }
-  const credit = opts.sourceName ? `\n\nSource: ${opts.sourceName}` : ""; // foreign content: source always at the very bottom
+  if (via.startsWith("tg:") && CHANNEL_REWRITE && c.kind === "news") {
+    const rw = await rewriteChannelPost(it.title, it.content);
+    if (rw?.title) it = { ...it, title: rw.title, content: rw.content };
+  }
+  const credit = opts.sourceName && CHANNEL_CREDIT ? `\n\nSource: ${opts.sourceName}` : ""; // optional source line at the very bottom
   const latency = Math.round((Date.now() - it.pubDate) / 1000);
   const toX = X_MODE === "all" || c.highAlert || c.kind !== "news";
 
@@ -611,7 +636,7 @@ async function handleItem(it: Item, opts: ItemOpts = {}) {
   stats.posted++;
   health.lastPostAt = Date.now();
   stats.lastLatencies = [latency, ...stats.lastLatencies].slice(0, 20);
-  if (c.kind !== "imbalance" && c.kind !== "cftc") await saveNews(it.title, it.content, c.kind, c.highAlert, opts.sourceName || (via === "feed" ? "FinancialJuice" : null));
+  if (c.kind !== "imbalance" && c.kind !== "cftc") await saveNews(it.title, it.content, c.kind, c.highAlert, CHANNEL_CREDIT ? opts.sourceName || (via === "feed" ? "FinancialJuice" : null) : null);
   log(`posted [${c.kind}${c.highAlert ? ",ALERT" : ""}${toX ? ",X" : ""}${opts.media ? "," + opts.media.kind : ""}] +${latency}s (${via}) | ${it.title.slice(0, 90)}`);
 }
 

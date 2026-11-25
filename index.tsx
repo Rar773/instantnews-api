@@ -218,11 +218,16 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
     if (/\bcok(e|ing coal)\b/i.test(title) && /\b(Chin|Dalian)/i.test(title) && /\b(contract|futures)\b/i.test(title)) return "China coke futures";
     // Chinese space-program updates
     if (/\b(Shenzhou|Tiangong)\b/i.test(title)) return "space mission";
+    // astronaut missions / "space ties" diplomacy (Xi–Pakistan joint mission, 4× in one morning); SpaceX etc. not matched
+    if (/\bastronauts?\b/i.test(title) || /\bspace (ties|partnerships?|cooperation)\b/i.test(title)) return "space mission";
+    // QatarEnergy MoUs / partnership talks (2×) — production cuts, LNG force majeure or outages still pass
+    if (/\bQatar ?Energy\b/i.test(title) && /\b(MoUs?|memorandum|partners?|partnership|explore|joint projects?|ties)\b/i.test(title)) return "energy MoU";
     // Fitch notes on foreign issuers (bank notes, regional outlooks); US/Treasury ratings and down/upgrades stay
     if (/\bFitch\b/i.test(title) && !/\b(U\.?S\.?|United States|America|Treasury)\b/i.test(title) && !/\b(downgrad|upgrad|default|cuts?\b|negative|watch)/i.test(title)) return "foreign rating note";
   }
   const sp = speakerOf(title);
-  if (!sp || highAlert || ALWAYS_ALLOW.some((k) => title.toLowerCase().includes(k))) return null;
+  // Mag 7 headlines are never capped ("Amazon: …" product news was cut by the speaker cap)
+  if (!sp || highAlert || MAG7.test(title) || ALWAYS_ALLOW.some((k) => title.toLowerCase().includes(k))) return null;
   const times = (speakerLog.get(sp) || []).filter((t) => now - t < 60 * 60_000);
   const cap = FOREIGN_CB.test(title) ? SPEAKER_CAP_FOREIGN_CB : SPEAKER_CAP;
   if (times.length >= cap && !MOVERS.test(title)) { speakerLog.set(sp, times); return "speaker cap (" + sp + ")"; }

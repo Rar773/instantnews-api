@@ -28,6 +28,16 @@ const cases: [string, boolean][] = [
   ["Taiwanese Equities Extend Losses, Falling Over 8%", false],
   ["U.S. Stock Futures Decline, With Nasdaq Down 1.1% and S&P 500 Off 0.6%", false],
   ["Peru imposes sanctions on Venezuela", false],
+  ["Xi, Pakistan's President Mark Joint Astronaut Mission With Messages of Congratulations", true],
+  ["XI SAYS CHINA-PAKISTAN ASTRONAUT MISSION REFLECTS LONG-STANDING TIES", true],
+  ["Xi Pledges Stronger Space Ties With Pakistan and Other Countries", true],
+  ["QatarEnergy Partners With JBIC to Strengthen Japan-Qatar Energy Ties Through New MoU", true],
+  ["QATARENERGY AND PARTNERS EXPLORE POTENTIAL JOINT PROJECTS ACROSS ENERGY", true],
+  ["QatarEnergy declares force majeure on LNG shipments after attack", false],
+  ["QatarEnergy halts LNG production at Ras Laffan", false],
+  ["SpaceX valuation hits $800 billion in tender offer", false],
+  ["Xi: China and the US to open new chapter of trade talks", false],
+  ["Amazon: used cars from dealers to be offered at launch of Amazon Autos", false],
 ];
 let bad = 0;
 for (const [t, want] of cases) {
@@ -35,4 +45,9 @@ for (const [t, want] of cases) {
   const skipped = c.skip || !!m.noiseReason(t, c.highAlert, Date.now() + Math.random() * 1e9);
   if (skipped !== want) { bad++; console.log("FAIL", want ? "should skip" : "should pass", "|", t); }
 }
+// speaker cap: Mag 7 never capped, other speakers still capped after SPEAKER_CAP quotes/h
+const t0 = Date.now() + 5e10;
+for (let i = 0; i < 4; i++) if (m.noiseReason(`Amazon: Autos detail ${i}`, false, t0 + i)) { bad++; console.log("FAIL Mag7 speaker capped", i); }
+const capped = [0, 1, 2, 3].map((i) => m.noiseReason(`Lagarde: remark ${i}`, false, t0 + i));
+if (!capped[3]) { bad++; console.log("FAIL non-Mag7 speaker cap no longer works"); }
 console.log(bad ? `${bad} failures` : "all filter cases OK"); if (bad) process.exit(1);

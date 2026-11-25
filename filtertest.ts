@@ -57,6 +57,9 @@ const cases: [string, boolean][] = [
   ["Ofcom fines X £18 million over online safety failures", false],
   ["Ofcom opens investigation into TikTok", false],
   ["Amazon: used cars from dealers to be offered at launch of Amazon Autos", false],
+  ["WH Sr. Adviser Hassett's interview on Fox Business ends.", true],
+  ["Powell's interview with CBS ends", false],
+  ["Hassett: interview with Fox to be aired tonight", false],
 ];
 let bad = 0;
 for (const [t, want] of cases) {
@@ -69,6 +72,10 @@ const t0 = Date.now() + 5e10;
 for (let i = 0; i < 4; i++) if (m.noiseReason(`Amazon: Autos detail ${i}`, false, t0 + i)) { bad++; console.log("FAIL Mag7 speaker capped", i); }
 const capped = [0, 1, 2, 3].map((i) => m.noiseReason(`Lagarde: remark ${i}`, false, t0 + i));
 if (!capped[3]) { bad++; console.log("FAIL non-Mag7 speaker cap no longer works"); }
+// Fed lines are never speaker-capped; other lines from the same speaker still are
+const t2 = Date.now() + 7e10;
+const hs = ["WH Sr. Adviser Hassett: Oil heading back to pre-war levels.", "WH Sr. Adviser Hassett: The fundamentals are very strong.", "WH Sr. Adviser Hassett: We expect Warsh, and the Fed will be data-driven.", "WH Sr. Adviser Hassett: We're in a Goldilocks economy."].map((t, i) => m.noiseReason(t, false, t2 + i));
+if (hs[2] || !hs[3]) { bad++; console.log("FAIL Fed line speaker cap", hs); }
 // channel handle tags are removed from reposted text
 for (const [raw, want] of [["MERZ SAYS RUSSIA WANTS MORE THAN UKRAINE (@FirstSquaw)", "MERZ SAYS RUSSIA WANTS MORE THAN UKRAINE"], ["NVDA UP 3%\n(@FirstSquaw)", "NVDA UP 3%"], ["CONTACT fed@x.com FOR DETAILS", "CONTACT fed@x.com FOR DETAILS"]] as const)
   if (m.cleanChannelText(raw).text !== want) { bad++; console.log("FAIL handle strip |", raw); }
@@ -83,6 +90,12 @@ for (const [raw, want] of [
   ["Trump says Fox News treated him unfairly", "Trump says Fox News treated him unfairly"],
   ["Iran's self-appointed envoy meets Saudi officials", "Iran's self-appointed envoy meets Saudi officials"],
   ["Contact ir@reuters.com for details", "Contact ir@reuters.com for details"],
+  ["US Officials tell Congress that there is no evidence that Huang's affair was a spy - WSJ. $NVDA", "US Officials tell Congress that there is no evidence that Huang's affair was a spy $NVDA"],
+  ["USTR Greer on NVIDIA: The company is structurally important -CNBC Interview. $NVDA", "USTR Greer on NVIDIA: The company is structurally important $NVDA"],
+  ["Iran claims an LNG carrier hit a mine in Hormuz - Mehr.", "Iran claims an LNG carrier hit a mine in Hormuz"],
+  ["NVIDIA shares fall 8% $NVDA", "NVIDIA shares fall 8% $NVDA"],
+  ["Apple and Microsoft rally $AAPL $MSFT", "Apple and Microsoft rally $AAPL $MSFT"],
+  ["Mehr says Iran will retaliate", "Mehr says Iran will retaliate"],
 ] as const) if (m.stripAttribution(raw) !== want) { bad++; console.log("FAIL source strip |", raw, "->", m.stripAttribution(raw)); }
 // foreign leader barrage: max SPEAKER_CAP non-war lines per hour, war/trade lines always pass
 const t1 = Date.now() + 9e10;

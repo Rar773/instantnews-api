@@ -229,6 +229,8 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
     if (/\bOfcom\b/i.test(title) && /\b(seeks? views|consult\w*|call for evidence)\b/i.test(title) && !MAG7.test(title) && !/\b(fines?d?|probe|investigat\w*|Musk|TikTok)\b/i.test(title)) return "UK regulator consultation";
     // QatarEnergy MoUs / partnership talks (2×) — production cuts, LNG force majeure or outages still pass
     if (/\bQatar ?Energy\b/i.test(title) && /\b(MoUs?|memorandum|partners?|partnership|explore|joint projects?|ties)\b/i.test(title)) return "energy MoU";
+    // "WH Sr. Adviser Hassett's interview on Fox Business ends." — end of a TV interview says nothing; Fed/Powell lines stay
+    if (/\binterview\b/i.test(title) && /\b(ends|ended|concludes|concluded|is over|wraps up)\b/i.test(title) && !/\b(Fed|FOMC|Powell)\b/i.test(title)) return "interview ends";
     // Fitch notes on foreign issuers (bank notes, regional outlooks); US/Treasury ratings and down/upgrades stay
     if (/\bFitch\b/i.test(title) && !/\b(U\.?S\.?|United States|America|Treasury)\b/i.test(title) && !/\b(downgrad|upgrad|default|cuts?\b|negative|watch)/i.test(title)) return "foreign rating note";
   }
@@ -243,7 +245,8 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
   }
   const sp = speakerOf(title);
   // Mag 7 headlines are never capped ("Amazon: …" product news was cut by the speaker cap)
-  if (!sp || highAlert || MAG7.test(title) || ALWAYS_ALLOW.some((k) => title.toLowerCase().includes(k))) return null;
+  // lines about the Fed (Hassett: "We expect Warsh, and the Fed will be data-driven") are never capped either
+  if (!sp || highAlert || MAG7.test(title) || /\b(Fed|FOMC|Powell|Warsh)\b/.test(title) || ALWAYS_ALLOW.some((k) => title.toLowerCase().includes(k))) return null;
   const times = (speakerLog.get(sp) || []).filter((t) => now - t < 60 * 60_000);
   const cap = FOREIGN_CB.test(title) ? SPEAKER_CAP_FOREIGN_CB : SPEAKER_CAP;
   if (times.length >= cap && !MOVERS.test(title)) { speakerLog.set(sp, times); return "speaker cap (" + sp + ")"; }
@@ -624,12 +627,18 @@ ${original}`, 300, 3500);
   return { title: stripAttribution(t), content: rest.map(stripAttribution).join("\n").trim() };
 }
 // safety net if the model leaves a trailing source: "… - Reuters", "… (Bloomberg)", "…, per WSJ", "…, citing sources"
-const OUTLETS = "Reuters|RTRS|Bloomberg|BBG|WSJ|Wall Street Journal|FT|Financial Times|CNBC|AP|AFP|Axios|NYT|New York Times|Politico|Semafor|Tass|TASS|RIA|IRIB|Fars|Tasnim|Xinhua|Nikkei|Kyodo|Yonhap|Al Arabiya|Al Jazeera|NBC|CBS|ABC|CNN|Fox|BBC|Sky|Dow Jones|MNI|Barron's|The Information|Chosun|JoongAng|Handelsblatt|Interfax|Caixin|SCMP|Jiji|NHK|Asahi|Yomiuri|ANSA|sources?|officials";
+const OUTLETS = "Reuters|RTRS|Bloomberg|BBG|WSJ|Wall Street Journal|FT|Financial Times|CNBC|AP|AFP|Axios|NYT|New York Times|Politico|Semafor|Tass|TASS|RIA|IRIB|Fars|Tasnim|Xinhua|Nikkei|Kyodo|Yonhap|Al Arabiya|Al Jazeera|NBC|CBS|ABC|CNN|Fox|BBC|Sky|Dow Jones|MNI|Barron's|The Information|Chosun|JoongAng|Handelsblatt|Interfax|Caixin|SCMP|Jiji|NHK|Asahi|Yomiuri|ANSA|Mehr|IRNA|ISNA|sources?|officials";
 // "… - Reuters", "… | Chosun", "…, per WSJ", "(according to Bloomberg News)", "…, says Reuters". A bare "says"/"reports" (no comma)
 // is a normal sentence ("Powell says officials are united"), and "self-appointed" is not "- AP", so those stay.
 const ATTRIB_RE = new RegExp(String.raw`(?:\s+[-–—]\s*|\s*\|\s*|,?\s*\(?\s*(?:per|via|citing|according to|reported by)\s+|,\s*(?:reports?|says)\s+)(?:${OUTLETS})\b(?:[^.\n]{0,40})?\)?\.?\s*$`, "i");
 export function stripAttribution(line: string) {
   let out = stripHandles(line.trim());
+  // "… - WSJ. $NVDA": a trailing cashtag hid the outlet from the end-anchored regexes; strip it, then put the tickers back
+  const tags = out.match(/(?:\s+\$[A-Z]{1,6})+\s*$/)?.[0] || "";
+  if (tags && out.length > tags.length) {
+    const head = stripAttribution(out.slice(0, out.length - tags.length));
+    if (head !== out.slice(0, out.length - tags.length).trim()) return head + " " + tags.trim().replace(/\s+/g, " ");
+  }
   const reportsRe = new RegExp(String.raw`(?:,|\s[-–—])\s*(?:${OUTLETS})\s+(?:reports?|reported|says|said)\.?\s*$`, "i");
   for (let i = 0; i < 2; i++) out = out.replace(ATTRIB_RE, "").replace(reportsRe, "").replace(/\s*\((?:Reuters|Bloomberg|AP|AFP|WSJ|CNBC)\)\s*$/i, "").trim();
   return out || line.trim();

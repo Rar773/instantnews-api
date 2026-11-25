@@ -225,6 +225,8 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
     if (/\bastronauts?\b/i.test(title) || /\bspace (ties|partnerships?|cooperation)\b/i.test(title)) return "space mission";
     // daily LME warehouse stock reports (copper/nickel/zinc/aluminium inventory, 4+ lines at once); LME price moves, halts, suspensions still pass
     if (/\bLME\b/i.test(title) && /\b(stocks?|inventor(y|ies)|warehouses?|on[- ]warrant|cancel+ed warrants?)\b/i.test(title) && !/\b(suspend\w*|halt\w*|record|prices?|surge\w*|plunge\w*|squeeze)\b/i.test(title)) return "LME stocks";
+    // UK regulator Ofcom consultations ("Ofcom Seeks Views on Faster Takedowns…") — fines/probes of big tech still pass
+    if (/\bOfcom\b/i.test(title) && /\b(seeks? views|consult\w*|call for evidence)\b/i.test(title) && !MAG7.test(title) && !/\b(fines?d?|probe|investigat\w*|Musk|TikTok)\b/i.test(title)) return "UK regulator consultation";
     // QatarEnergy MoUs / partnership talks (2×) — production cuts, LNG force majeure or outages still pass
     if (/\bQatar ?Energy\b/i.test(title) && /\b(MoUs?|memorandum|partners?|partnership|explore|joint projects?|ties)\b/i.test(title)) return "energy MoU";
     // Fitch notes on foreign issuers (bank notes, regional outlooks); US/Treasury ratings and down/upgrades stay
@@ -622,11 +624,13 @@ ${original}`, 300, 3500);
   return { title: stripAttribution(t), content: rest.map(stripAttribution).join("\n").trim() };
 }
 // safety net if the model leaves a trailing source: "… - Reuters", "… (Bloomberg)", "…, per WSJ", "…, citing sources"
-const OUTLETS = "Reuters|RTRS|Bloomberg|BBG|WSJ|Wall Street Journal|FT|Financial Times|CNBC|AP|AFP|Axios|NYT|New York Times|Politico|Semafor|Tass|TASS|RIA|IRIB|Fars|Tasnim|Xinhua|Nikkei|Kyodo|Yonhap|Al Arabiya|Al Jazeera|NBC|CBS|ABC|CNN|Fox|BBC|Sky|Dow Jones|MNI|Barron's|The Information|sources|officials";
-const ATTRIB_RE = new RegExp(String.raw`\s*(?:[-–—|]\s*|,?\s*\(?\s*(?:per|via|citing|according to|reports?|reported by|says)\s+)(?:${OUTLETS})(?:[^.\n]{0,40})?\)?\.?\s*$`, "i");
+const OUTLETS = "Reuters|RTRS|Bloomberg|BBG|WSJ|Wall Street Journal|FT|Financial Times|CNBC|AP|AFP|Axios|NYT|New York Times|Politico|Semafor|Tass|TASS|RIA|IRIB|Fars|Tasnim|Xinhua|Nikkei|Kyodo|Yonhap|Al Arabiya|Al Jazeera|NBC|CBS|ABC|CNN|Fox|BBC|Sky|Dow Jones|MNI|Barron's|The Information|Chosun|JoongAng|Handelsblatt|Interfax|Caixin|SCMP|Jiji|NHK|Asahi|Yomiuri|ANSA|sources?|officials";
+// "… - Reuters", "… | Chosun", "…, per WSJ", "(according to Bloomberg News)", "…, says Reuters". A bare "says"/"reports" (no comma)
+// is a normal sentence ("Powell says officials are united"), and "self-appointed" is not "- AP", so those stay.
+const ATTRIB_RE = new RegExp(String.raw`(?:\s+[-–—]\s*|\s*\|\s*|,?\s*\(?\s*(?:per|via|citing|according to|reported by)\s+|,\s*(?:reports?|says)\s+)(?:${OUTLETS})\b(?:[^.\n]{0,40})?\)?\.?\s*$`, "i");
 export function stripAttribution(line: string) {
   let out = stripHandles(line.trim());
-  const reportsRe = new RegExp(String.raw`,?\s*(?:${OUTLETS})\s+(?:reports?|reported|says|said)\.?\s*$`, "i");
+  const reportsRe = new RegExp(String.raw`(?:,|\s[-–—])\s*(?:${OUTLETS})\s+(?:reports?|reported|says|said)\.?\s*$`, "i");
   for (let i = 0; i < 2; i++) out = out.replace(ATTRIB_RE, "").replace(reportsRe, "").replace(/\s*\((?:Reuters|Bloomberg|AP|AFP|WSJ|CNBC)\)\s*$/i, "").trim();
   return out || line.trim();
 }
@@ -639,6 +643,8 @@ async function handleItem(it: Item, opts: ItemOpts = {}) {
   if (c.kind !== "imbalance" && c.kind !== "cftc" && via !== "test" && isDuplicateStory(it.title, via)) { stats.skipped++; return log("duplicate story", `(${via})`, it.title.slice(0, 90)); }
   const noise = c.kind === "news" && via !== "test" ? noiseReason(it.title, c.highAlert || !!opts.alert) : null;
   if (noise) { stats.skipped++; return log("skip", noise, "|", it.title.slice(0, 90)); }
+  // feed headlines end with their outlet too ("… - Chosun", "… - Source"): drop it, Marian wants no sources in posts
+  if (!via.startsWith("tg:") && c.kind === "news") it = { ...it, title: stripAttribution(it.title) };
   if (via.startsWith("tg:") && CHANNEL_REWRITE && c.kind === "news") {
     const rw = await rewriteChannelPost(it.title, it.content);
     if (rw?.title) it = { ...it, title: rw.title, content: rw.content };

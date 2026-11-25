@@ -53,6 +53,9 @@ const cases: [string, boolean][] = [
   ["QatarEnergy halts LNG production at Ras Laffan", false],
   ["SpaceX valuation hits $800 billion in tender offer", false],
   ["Xi: China and the US to open new chapter of trade talks", false],
+  ["Ofcom Seeks Views on Faster Takedowns of Intimate Image Abuse Online", true],
+  ["Ofcom fines X £18 million over online safety failures", false],
+  ["Ofcom opens investigation into TikTok", false],
   ["Amazon: used cars from dealers to be offered at launch of Amazon Autos", false],
 ];
 let bad = 0;
@@ -69,6 +72,18 @@ if (!capped[3]) { bad++; console.log("FAIL non-Mag7 speaker cap no longer works"
 // channel handle tags are removed from reposted text
 for (const [raw, want] of [["MERZ SAYS RUSSIA WANTS MORE THAN UKRAINE (@FirstSquaw)", "MERZ SAYS RUSSIA WANTS MORE THAN UKRAINE"], ["NVDA UP 3%\n(@FirstSquaw)", "NVDA UP 3%"], ["CONTACT fed@x.com FOR DETAILS", "CONTACT fed@x.com FOR DETAILS"]] as const)
   if (m.cleanChannelText(raw).text !== want) { bad++; console.log("FAIL handle strip |", raw); }
+// outlet/source tags are removed, normal sentences stay intact
+for (const [raw, want] of [
+  ["South Korea seeks to expand stock stabilization fund - Chosun", "South Korea seeks to expand stock stabilization fund"],
+  ["ECB policymakers see mrr decision in December or possibly early 2027 - Source", "ECB policymakers see mrr decision in December or possibly early 2027"],
+  ["ECB debated raising the minimum reserve requirement - Sources familiar with the matter", "ECB debated raising the minimum reserve requirement"],
+  ["Apple in talks to buy startup, Bloomberg reports", "Apple in talks to buy startup"],
+  ["US weighs new chip curbs, according to Reuters", "US weighs new chip curbs"],
+  ["Fed's Powell says officials are united on policy", "Fed's Powell says officials are united on policy"],
+  ["Trump says Fox News treated him unfairly", "Trump says Fox News treated him unfairly"],
+  ["Iran's self-appointed envoy meets Saudi officials", "Iran's self-appointed envoy meets Saudi officials"],
+  ["Contact ir@reuters.com for details", "Contact ir@reuters.com for details"],
+] as const) if (m.stripAttribution(raw) !== want) { bad++; console.log("FAIL source strip |", raw, "->", m.stripAttribution(raw)); }
 // foreign leader barrage: max SPEAKER_CAP non-war lines per hour, war/trade lines always pass
 const t1 = Date.now() + 9e10;
 const lead = [0, 1, 2].map((i) => m.noiseReason(`MERZ SAYS EUROPE IS OUR WIDER CULTURAL HOME PART ${i}`, false, t1 + i));

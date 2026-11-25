@@ -595,9 +595,11 @@ const toks = (s: string) => new Set(norm(s).split(" ").filter((w) => w.length > 
 // Only compares across DIFFERENT sources: items from one source are already de-duplicated by id, and similar-looking
 // lines from the same source are usually separate facts (CPI MoM vs CPI YoY, initial vs continuing claims, two Fed speakers).
 const OUTLET_WORDS = new Set("reuters rtrs bloomberg bbg wsj cnbc axios nyt politico semafor tass ria irib fars tasnim xinhua nikkei kyodo yonhap nbc cbs abc cnn fox bbc mni barron interview exclusive".split(" "));
+const COMPANY_TICKER: [string, string][] = [["nvidia", "nvda"], ["apple", "aapl"], ["microsoft", "msft"], ["tesla", "tsla"], ["amazon", "amzn"], ["alphabet", "googl"], ["google", "googl"], ["meta", "meta"], ["netflix", "nflx"], ["broadcom", "avgo"], ["intel", "intc"], ["anthropic", "ant"], ["openai", "openai"]];
 const tickersOf = (s: string) => new Set((s.match(/\$[A-Z]{1,6}\b/g) || []).map((x) => x.toUpperCase()));
 export function isDuplicateStory(text: string, src = "feed", now = Date.now()) {
   const t = new Set([...toks(text)].filter((w) => !OUTLET_WORDS.has(w))); // "- CNBC" on one version must not hide the match
+  for (const [name, tick] of COMPANY_TICKER) if (t.has(name)) t.add(tick); // "Nvidia" in one version, "$NVDA" in the other
   const tk = tickersOf(text);
   const isData = /\bActual\b/.test(text);
   while (recent.length && now - recent[0].ts > 90 * 60_000) recent.shift();
@@ -607,6 +609,8 @@ export function isDuplicateStory(text: string, src = "feed", now = Date.now()) {
     for (const w of t) if (r.tokens.has(w)) inter++;
     const overlap = inter / Math.min(t.size, r.tokens.size);
     if (r.src !== src && overlap >= 0.7 && inter >= 4) return true;
+    // another source, within 10 min, mostly the same words (quotes get paraphrased: "was told" vs "got assurances")
+    if (r.src !== src && overlap >= 0.6 && inter >= 4 && now - r.ts < 10 * 60_000) return true;
     // same company ($TICKER on both) from another source within 30 min, clearly the same story told in other words
     if (r.src !== src && tk.size && [...tk].some((x) => r.tickers?.has(x)) && overlap >= 0.5 && inter >= 4 && now - r.ts < 30 * 60_000) return true;
     // same source repeating itself (e.g. 6 WSJ tariff lines in 3 minutes) — never for data lines like CPI MoM/YoY
@@ -679,6 +683,13 @@ export function dropInlineSource(line: string) {
   let s = line.replace(/^(?:according to|citing|per)\s+[^,]{1,50},\s*/i, "").replace(/,?\s*(?:according to|citing)\s+[^,.]{1,50}(?=[,.]|$)/gi, "");
   return s ? s[0].toUpperCase() + s.slice(1) : s;
 }
+// a channel post that stops mid-word ("Vance on N") or is just a couple of characters
+export function isCutOff(title: string) {
+  const t = title.replace(/\$[A-Z]+/g, "").trim();
+  if (t.length < 8) return true;
+  const last = t.split(/\s+/).pop() || "";
+  return /^[A-Za-z]$/.test(last) && !/^[AaI]$/.test(last);
+}
 async function handleItem(it: Item, opts: ItemOpts = {}) {
   const via = opts.via || "feed";
   const c = classify(it);
@@ -686,6 +697,8 @@ async function handleItem(it: Item, opts: ItemOpts = {}) {
   if (opts.alert && (!via.startsWith("tg:") || alertWorthy(it.title))) c.highAlert = true;
   if (mem.kv.get("paused") === "1" && via !== "test") return log("paused, not posting:", it.title.slice(0, 80));
   if (c.skip) { stats.skipped++; return log("skip", c.reason, "|", it.title.slice(0, 90)); }
+  // cut-off posts ("Vance on N"): too short to be a headline and no number in it
+  if (via.startsWith("tg:") && c.kind === "news" && !it.content && isCutOff(it.title)) { stats.skipped++; return log("skip incomplete |", it.title); }
   if (c.kind !== "imbalance" && c.kind !== "cftc" && via !== "test" && isDuplicateStory(it.title, via)) { stats.skipped++; return log("duplicate story", `(${via})`, it.title.slice(0, 90)); }
   const noise = c.kind === "news" && via !== "test" ? noiseReason(it.title, c.highAlert) : null;
   if (noise) { stats.skipped++; return log("skip", noise, "|", it.title.slice(0, 90)); }

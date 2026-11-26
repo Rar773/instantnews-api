@@ -193,7 +193,7 @@ const MAG7 = /\$(AAPL|MSFT|NVDA|GOOGL?|AMZN|META|TSLA)\b|\b(Apple|Microsoft|Nvid
 const MOVERS = /\b(hike|hikes|hiking|cut|cuts|cutting|recession|intervention|intervene|emergency|QE|tightening|easing|tariffs?|sanctions?|war|ceasefire|default|downgrade|upgrade)\b/i;
 const FOREIGN_LEADER = /\b(Merz|Starmer|Macron|Meloni|S[aá]nchez|Carney|Albanese|Ishiba|Takaichi|Lee Jae[- ]myung|Luxon|Tusk|Orb[aá]n|Fico|Babi[sš]|Frederiksen|Kristersson|Schoof|De Wever|Costa|Mitsotakis|Montenegro|Reeves|Lombard)\b/i;
 // a foreign leader on war, Russia/China/Iran, trade, the US, markets or a government crisis still always goes through
-const LEADER_KEEP = /\b(Russia|Russian|Putin|Ukrain\w*|Zelensk\w*|war|attack|strike|drones?|missiles?|NATO|troops|military|defen[cs]e|nuclear|China|Chinese|Xi|Iran|Israel|Gaza|trade|tariffs?|United States|America|Trump|Washington|Fed|dollar|oil|gas|energy|bonds?|yields?|markets?|election|resign\w*|no[- ]confidence|collapse)\b/i;
+const LEADER_KEEP = /\b(Russia|Russian|Putin|Ukrain\w*|Zelensk\w*|war|attack|strike|drones?|missiles?|NATO|troops|military|defen[cs]e|nuclear|China|Chinese|Xi|Iran|Israel|Gaza|trade|tariffs?|United States|America|Trump|Washington|Fed|dollar|oil|gas|energy|bonds?|yields?|markets?|election|resign\w*|no[- ]confidence|collapse|digital (?:services )?tax\w*)\b/i;
 const SPEAKER_CAP = Number(E.SPEAKER_CAP || 2); // quotes per speaker per hour before only market-moving lines pass
 const SPEAKER_CAP_FOREIGN_CB = Number(E.SPEAKER_CAP_FOREIGN_CB || 1); // BoE/BoC/ECB/BoJ… officials matter less to US traders
 const FOREIGN_CB_INST_CAP = Number(E.FOREIGN_CB_INST_CAP || 3); // all lines from one foreign central bank per hour
@@ -212,7 +212,7 @@ export function speakerOf(title: string) {
 const ALERT_TOPICS = /\b(Fed|FOMC|Powell|Warsh|Treasury|Treasuries|Nasdaq|S&P|Dow|NQ|stocks?|futures|yields?|dollar|oil|crude|Brent|WTI|OPEC|gold|bitcoin|BTC|crypto|Trump|White House|Congress|Pentagon|U\.S\.?|US|USA|United States|America|Iran|Israel|Hormuz|Taiwan|NATO|missiles?|drones?|strikes?|attacks?|troops|military)\b/i;
 // Russian domestic business news (marketsAlpha: "🇷🇺 Levan Nazarov… fintech group", "Russia-Kazakhstan trade nears $30 billion", "MGKL climbs 12% amid defaults").
 // Anything about war/Ukraine/peace talks, sanctions, oil/gas, the CBR rate, Putin/Kremlin, the US/China/Europe or markets still counts.
-const RU_CONTEXT = /🇷🇺|\b(Russia|Russian|Russia[’']s|Moscow|MOEX|Sber|Sberbank|Gref|Aeroflot|Kazakh\w*|Tokaev|Tokayev|State Duma|Duma)\b/iu;
+const RU_CONTEXT = /🇷🇺|\b(Russia|Russian|Russia[’']s|Moscow|MOEX|Sber|Sberbank|Gref|Aeroflot|AFK Sistema|Kazakh\w*|Tokaev|Tokayev|State Duma|Duma)\b/iu;
 const RU_KEEP = /\b(war|attack\w*|strikes?|drones?|missiles?|nuclear|weapons?|NATO|Ukrain\w*|Zelensk\w*|Kyiv|Belarus|peace|ceasefire|truce|negotiat\w*|talks|troops|military|army|sanction\w*|tariffs?|oil|gas|diesel|gasoline|fuel|crude|LNG|refiner\w*|pipelines?|energy|OPEC|grain|wheat|fertili[sz]ers?|ruble|rouble|key rate|rate decision|central bank|CBR|Nabiullina|Putin|Kremlin|Peskov|Lavrov|Medvedev|Trump|Witkoff|Rubio|Vance|U\.S\.?|US|USA|United States|America\w*|Washington|China|Chinese|Xi|Iran|India|Europe\w*|EU|gold|bitcoin|BTC|crypto|Lukoil|Rosneft|Gazprom|Novatek|Transneft|escalat\w*|threat\w*|retaliat\w*|respon\w*|warn\w*|border|invad\w*|security|defen[cs]e|diplomat\w*|embass\w*|spy|spies|cyber\w*|hack\w*|Moldova|Baltic\w*|Poland|Polish|Finland|German\w*|Britain|UK|France|French|Japan)\b/i;
 // Sberbank CEO "German Gref" is not Germany (26 Nov: "German Gref frequently visits Astana…" passed as if it had a Germany angle)
 export function russiaLocal(title: string) { title = title.replace(/\bGerman(?=\s+Gref\b)/gi, "Herman"); return RU_CONTEXT.test(title) && !RU_KEEP.test(title) && !MOVERS.test(title) && !MAG7.test(title) && !FOREIGN_LEADER.test(title); }
@@ -275,7 +275,8 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
   // foreign heads of government talking domestic politics (Merz on the German budget: 4+ lines in a morning).
   // Their titles often have no "Name:" prefix ("GERMAN CHANCELLOR MERZ SAYS …"), so speakerOf() misses them.
   const leader = !highAlert && title.match(FOREIGN_LEADER)?.[1]?.toLowerCase().replace(/\s+/g, " ");
-  if (leader && !LEADER_KEEP.test(title) && !/\b(U\.S\.?|US|USA)\b/.test(title) && !MOVERS.test(title)) {
+  // "budget cuts" is budget talk, not a market mover (26 Nov: "Macron: EU budget cuts would be a strategic mistake" passed via "cuts")
+  if (leader && !LEADER_KEEP.test(title) && !/\b(U\.S\.?|US|USA)\b/.test(title) && !MOVERS.test(title.replace(/\bbudget (?:cuts?|cutting)\b/gi, "budget"))) {
     if (/\bbudgets?\b/i.test(title)) return "foreign budget talk";
     const lt = (speakerLog.get("leader:" + leader) || []).filter((t) => now - t < 60 * 60_000);
     if (lt.length >= SPEAKER_CAP) { speakerLog.set("leader:" + leader, lt); return "speaker cap (" + leader + ")"; }

@@ -206,4 +206,14 @@ for (const t of ["ECB rate decision: raises rates to 2.50%", "BoE officials: eme
 // Russian AI conference lines skipped; Putin on war/US/oil/chips still passes
 for (const t of ["Putin Calls for Update to Russia's National AI Strategy", "Putin Warns AI Could Become a Dangerous Threat to Humanity", "🚀 Russia aims for the widespread implementation of artificial intelligence (AI) across all sectors"]) if (!/^Russia (AI|local)$/.test(m.noiseReason(t, false) || "")) { bad++; console.log("FAIL Russia AI |", t); }
 for (const t of ["Putin: AI drones will be used in Ukraine war", "Putin says US AI chip curbs will backfire", "Russia bans Nvidia AI chips", "OpenAI to open office in Europe"]) if (m.noiseReason(t, false, Date.now() + 5e10)) { bad++; console.log("FAIL Russia AI too wide |", t); }
+// 26 Nov (21:40): "budget cuts" from a foreign leader is budget talk; EU digital tax (hits US tech) and real cuts/war still pass
+{
+  const T = Date.now() + 7e10;
+  if (m.noiseReason("France’s President Macron: EU budget cuts would be a strategic mistake.", false, T) !== "foreign budget talk") { bad++; console.log("FAIL budget cuts"); }
+  if (m.noiseReason("France’s President Macron: France wants the EU digital tax to take effect in 2028", false, T + 1e9)) { bad++; console.log("FAIL digital tax cut"); }
+  if (m.noiseReason("Starmer: budget cuts tariffs on US imports", false, T + 2e9)) { bad++; console.log("FAIL budget tariffs cut"); }
+  if (m.noiseReason("Meloni: Italy will cut taxes", false, T + 3e9)) { bad++; console.log("FAIL leader cut lost"); }
+  if (m.noiseReason("📈 AFK Sistema reported a 5.1% increase in revenue for the third quarter, reaching 373.3 billion rubles", false, T) !== "Russia local") { bad++; console.log("FAIL AFK Sistema"); }
+  if (m.noiseReason("AFK Sistema hit by new US sanctions", false, T + 4e9)) { bad++; console.log("FAIL AFK Sistema sanctions"); }
+}
 console.log(bad ? `${bad} failures` : "all filter cases OK"); if (bad) process.exit(1);

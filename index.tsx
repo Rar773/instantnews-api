@@ -211,11 +211,15 @@ export function speakerOf(title: string) {
 const ALERT_TOPICS = /\b(Fed|FOMC|Powell|Warsh|Treasury|Treasuries|Nasdaq|S&P|Dow|NQ|stocks?|futures|yields?|dollar|oil|crude|Brent|WTI|OPEC|gold|bitcoin|BTC|crypto|Trump|White House|Congress|Pentagon|U\.S\.?|US|USA|United States|America|Iran|Israel|Hormuz|Taiwan|NATO|missiles?|drones?|strikes?|attacks?|troops|military)\b/i;
 // Russian domestic business news (marketsAlpha: "🇷🇺 Levan Nazarov… fintech group", "Russia-Kazakhstan trade nears $30 billion", "MGKL climbs 12% amid defaults").
 // Anything about war/Ukraine/peace talks, sanctions, oil/gas, the CBR rate, Putin/Kremlin, the US/China/Europe or markets still counts.
-const RU_CONTEXT = /🇷🇺|\b(Russia|Russian|Russia[’']s|Moscow|MOEX|Sber|Sberbank|Aeroflot|Kazakh\w*|Tokaev)\b/iu;
+const RU_CONTEXT = /🇷🇺|\b(Russia|Russian|Russia[’']s|Moscow|MOEX|Sber|Sberbank|Gref|Aeroflot|Kazakh\w*|Tokaev)\b/iu;
 const RU_KEEP = /\b(war|attack\w*|strikes?|drones?|missiles?|nuclear|weapons?|NATO|Ukrain\w*|Zelensk\w*|Kyiv|Belarus|peace|ceasefire|truce|negotiat\w*|talks|troops|military|army|sanction\w*|tariffs?|oil|gas|diesel|gasoline|fuel|crude|LNG|refiner\w*|pipelines?|energy|OPEC|grain|wheat|fertili[sz]ers?|ruble|rouble|key rate|rate decision|central bank|CBR|Nabiullina|Putin|Kremlin|Peskov|Lavrov|Medvedev|Trump|Witkoff|Rubio|Vance|U\.S\.?|US|USA|United States|America\w*|Washington|China|Chinese|Xi|Iran|India|Europe\w*|EU|gold|bitcoin|BTC|crypto|Lukoil|Rosneft|Gazprom|Novatek|Transneft|escalat\w*|threat\w*|retaliat\w*|respon\w*|warn\w*|border|invad\w*|security|defen[cs]e|diplomat\w*|embass\w*|spy|spies|cyber\w*|hack\w*|Moldova|Baltic\w*|Poland|Polish|Finland|German\w*|Britain|UK|France|French|Japan)\b/i;
-export function russiaLocal(title: string) { return RU_CONTEXT.test(title) && !RU_KEEP.test(title) && !MOVERS.test(title) && !MAG7.test(title) && !FOREIGN_LEADER.test(title); }
+// Sberbank CEO "German Gref" is not Germany (26 Nov: "German Gref frequently visits Astana…" passed as if it had a Germany angle)
+export function russiaLocal(title: string) { title = title.replace(/\bGerman(?=\s+Gref\b)/gi, "Herman"); return RU_CONTEXT.test(title) && !RU_KEEP.test(title) && !MOVERS.test(title) && !MAG7.test(title) && !FOREIGN_LEADER.test(title); }
 // weekly natural-gas storage ("US Natural Gas Supplies Fall 24 BCF") is routine data, never a HIGH ALERT on a channel's 🚨 alone
 const ROUTINE_ALERT = /\b(BCF|natural gas (?:storage|supplies|inventor\w*|stocks))\b/i;
+// crypto positioning commentary ("Large cluster of BTC short positions sits between $61,000 and $65,000") is not a HIGH ALERT;
+// actual liquidations ("$1B of BTC shorts liquidated") and price moves still are
+const POSITIONING_ALERT = /\b(?:clusters? of|wall of)\b[^.]{0,40}\b(?:short|long)s?\b|\b(?:short|long) positions? (?:sits?|sitting|stacked|clustered|building)\b|\bliquidation (?:map|heatmap|levels?|clusters?)\b/i;
 // a leaders' meeting announced ("Trump, Rutte Meet on Ukraine War, Iran Conflict") is not a HIGH ALERT by itself — what they decide is;
 // Fed/FOMC/OPEC meetings and anything matching HIGH_ALERT_RE (strikes, tariffs, rate moves…) still alert
 const MEETING_ONLY = /\b(meet|meets|meeting|to meet|hold talks)\b/i;
@@ -223,6 +227,7 @@ const MEETING_KEEP = /\b(Fed|FOMC|Powell|Warsh|OPEC\+?|ECB|BoJ|rates?|strikes?|s
 export function alertWorthy(title: string) {
   if (HIGH_ALERT_RE.test(title) && !russiaLocal(title)) return true;
   if (russiaLocal(title) || ROUTINE_ALERT.test(title)) return false;
+  if (POSITIONING_ALERT.test(title) && !/\bliquidat(?:ed|ions? of)\b/i.test(title)) return false;
   if (MEETING_ONLY.test(title) && !MEETING_KEEP.test(title) && !MAG7.test(title)) return false; // MOVERS' bare "war" ("Meet on Ukraine War") is not enough
   return MOVERS.test(title) || MAG7.test(title) || ALERT_TOPICS.test(title);
 }
@@ -252,6 +257,9 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
     if (/\bRussia(n|[’']s)?\b/i.test(title) && /\b(inflation|CPI|consumer prices)\b/i.test(title) && !MOVERS.test(title) && !/\b(oil|gas|crude|ruble|rouble|rate decision|key rate)\b/i.test(title)) return "Russia inflation";
     // Russian domestic business/trade news with no war, sanctions, energy, CBR or US/China angle (3× in one evening)
     if (russiaLocal(title) && !HIGH_ALERT_RE.test(title)) return "Russia local";
+    // logistics of Putin's yearly Q&A ("Kremlin Schedules Putin Live Q&A…", "Questions for Putin to be accepted via VK…", 2× on 26 Nov);
+    // what Putin SAYS there (war, ceasefire, US, oil…) still passes
+    if (/\bPutin\b/i.test(title) && /\b(Q&A|Q ?& ?A|Direct Line|questions?|press conference|phone-in)\b/i.test(title) && /\b(schedul\w*|to be (?:held|accepted)|accepted|submit\w*|chatbot|VK|Odnoklassniki|will hold|to hold|date)\b/i.test(title) && !RU_KEEP.test(title.replace(/\b(Putin|Kremlin)\b/gi, ""))) return "Putin Q&A logistics";
     // "WH Sr. Adviser Hassett's interview on Fox Business ends." — end of a TV interview says nothing; Fed/Powell lines stay
     if (/\binterview\b/i.test(title) && /\b(ends|ended|concludes|concluded|is over|wraps up)\b/i.test(title) && !/\b(Fed|FOMC|Powell)\b/i.test(title)) return "interview ends";
     // Fitch notes on foreign issuers (bank notes, regional outlooks); US/Treasury ratings and down/upgrades stay
@@ -662,7 +670,7 @@ ${original}`, 400, original.length > 200 ? 6000 : 3500);
   const have = new Set(nums(clean));
   if (nums(original).some((n) => !have.has(n))) { log("rewrite changed numbers, keeping original:", title.slice(0, 80)); return null; }
   const [t, ...rest] = clean.split("\n");
-  return { title: stripAttribution(t), content: rest.map(stripAttribution).join("\n").trim() };
+  return { title: stripAttribution(stripLabel(t)), content: rest.map(stripAttribution).join("\n").trim() };
 }
 // safety net if the model leaves a trailing source: "… - Reuters", "… (Bloomberg)", "…, per WSJ", "…, citing sources"
 const OUTLETS = "Reuters|RTRS|Bloomberg|BBG|WSJ|Wall Street Journal|FT|Financial Times|CNBC|AP|AFP|Axios|NYT|New York Times|Politico|Semafor|Tass|TASS|RIA|IRIB|Fars|Tasnim|Xinhua|Nikkei|Kyodo|Yonhap|Al Arabiya|Al Jazeera|NBC|CBS|ABC|CNN|Fox|BBC|Sky|Dow Jones|MNI|Barron's|The Information|Chosun|JoongAng|Handelsblatt|Interfax|Caixin|SCMP|Jiji|NHK|Asahi|Yomiuri|ANSA|Mehr|IRNA|ISNA|Israel[’']s (?:Channel \\d+|Kan|Army Radio|N12|i24)|Channel 1[234]|Kan News|Ynet|Haaretz|Times of Israel|Jerusalem Post|Maariv|i24 ?News|Army Radio|witness(?:es)?|sources?|officials";
@@ -1011,6 +1019,8 @@ let tgc: TelegramClient | null = null;
 let login: { phone?: string; hash?: string } = {};
 const client = () => (tgc ||= ((globalThis as any).__tgc = new TelegramClient({ apiId: TG_API_ID, apiHash: TG_API_HASH, storage: new MemoryStorage(), logLevel: 2 } as any)));
 
+// "Headline: …" label (marketsAlpha, and the Claude rewrite added it itself on 26 Nov 06:06); "Headline inflation…" stays
+export function stripLabel(line: string) { return line.replace(/^\s*(?:\*\*)?Headline\s*:\s*(?:\*\*)?\s*/i, "").trim(); }
 const PROMO_RE = /(t\.me\/|https?:\/\/|join (us|our|now)|subscribe|follow us|turn on notifications|share this|^@\w+$|^➡️|^👉)/i;
 const LEAD_RE = /^(?:[🚨⚡️🔴🟥‼️❗🔥📢🇺🇸\s]|BREAKING|JUST IN|NEW|UPDATE|DEVELOPING|ALERT|FLASH)+[:\-—]?\s*/iu;
 // channel handle tags: "… UKRAINE (@FirstSquaw)", "via @FirstSquawk", a line that is only "@FirstSquaw"
@@ -1020,7 +1030,7 @@ export function cleanChannelText(raw: string) {
   const lines = raw.split("\n").map((l) => stripHandles(l.trim())).filter((l) => l && !PROMO_RE.test(l));
   if (!lines.length) return { text: "", alert: false };
   const alert = /^\s*(?:🚨|‼️|BREAKING)/iu.test(lines[0]);
-  lines[0] = lines[0].replace(LEAD_RE, "").replace(/^Headline:\s*/i, "").trim(); // marketsAlpha "Headline: …" label
+  lines[0] = stripLabel(lines[0].replace(LEAD_RE, "")); // marketsAlpha "Headline: …" label
   return { text: lines.filter(Boolean).join("\n").trim(), alert };
 }
 

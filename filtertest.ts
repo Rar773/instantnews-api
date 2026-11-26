@@ -160,4 +160,12 @@ const t1 = Date.now() + 9e10;
 const lead = [0, 1, 2].map((i) => m.noiseReason(`MERZ SAYS EUROPE IS OUR WIDER CULTURAL HOME PART ${i}`, false, t1 + i));
 if (!lead[2] || lead[0] || lead[1]) { bad++; console.log("FAIL leader cap", lead); }
 if (m.noiseReason("MERZ SAYS RUSSIA IS ESCALATING AGAIN", false, t1 + 5)) { bad++; console.log("FAIL leader war line capped"); }
+// 26 Nov: Gref (Sberbank) is not Germany; Putin Q&A logistics skipped, his statements pass; BTC positioning is no HIGH ALERT; "Headline:" label from rewrite
+if (m.noiseReason("🇷🇺🇰🇿 German Gref frequently visits Astana to meet with President Tokayev and discuss investment", false) !== "Russia local") { bad++; console.log("FAIL Gref local"); }
+if (m.noiseReason("German Chancellor Merz warns Russia on Baltic drones", false, Date.now() + 8e10)) { bad++; console.log("FAIL German stays"); }
+if (m.noiseReason("Kremlin Schedules Putin Live Q&A and Press Conference for December 10", false) !== "Putin Q&A logistics" || m.noiseReason("Questions for Putin to be accepted via VK, Odnoklassniki and Max chatbot", false) !== "Putin Q&A logistics") { bad++; console.log("FAIL Putin Q&A"); }
+for (const t of ["Putin at press conference: Russia ready for ceasefire talks with Ukraine", "Putin says Russia will respond to US tariffs", "Putin: Russia to cut oil output"]) if (m.noiseReason(t, false, Date.now() + 7e10)) { bad++; console.log("FAIL Putin statement skipped |", t); }
+if (m.alertWorthy("Large cluster of BTC short positions sits between $61,000 and $65,000")) { bad++; console.log("FAIL BTC positioning alert"); }
+for (const t of ["Bitcoin plunges 8% to $58,000", "$1 billion of BTC shorts liquidated as bitcoin jumps above $65,000", "US stocks plunge as Fed hikes"]) if (!m.alertWorthy(t)) { bad++; console.log("FAIL alert lost |", t); }
+if (m.stripLabel("Headline: Kremlin Schedules Putin Live Q&A") !== "Kremlin Schedules Putin Live Q&A" || m.stripLabel("**Headline:** Nvidia halts shipments") !== "Nvidia halts shipments" || m.stripLabel("Headline inflation rises 3%") !== "Headline inflation rises 3%") { bad++; console.log("FAIL stripLabel"); }
 console.log(bad ? `${bad} failures` : "all filter cases OK"); if (bad) process.exit(1);

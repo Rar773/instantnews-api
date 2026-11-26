@@ -211,14 +211,19 @@ export function speakerOf(title: string) {
 const ALERT_TOPICS = /\b(Fed|FOMC|Powell|Warsh|Treasury|Treasuries|Nasdaq|S&P|Dow|NQ|stocks?|futures|yields?|dollar|oil|crude|Brent|WTI|OPEC|gold|bitcoin|BTC|crypto|Trump|White House|Congress|Pentagon|U\.S\.?|US|USA|United States|America|Iran|Israel|Hormuz|Taiwan|NATO|missiles?|drones?|strikes?|attacks?|troops|military)\b/i;
 // Russian domestic business news (marketsAlpha: "🇷🇺 Levan Nazarov… fintech group", "Russia-Kazakhstan trade nears $30 billion", "MGKL climbs 12% amid defaults").
 // Anything about war/Ukraine/peace talks, sanctions, oil/gas, the CBR rate, Putin/Kremlin, the US/China/Europe or markets still counts.
-const RU_CONTEXT = /🇷🇺|\b(Russia|Russian|Russia[’']s|Moscow|MOEX|Sber|Sberbank|Kazakh\w*|Tokaev)\b/iu;
+const RU_CONTEXT = /🇷🇺|\b(Russia|Russian|Russia[’']s|Moscow|MOEX|Sber|Sberbank|Aeroflot|Kazakh\w*|Tokaev)\b/iu;
 const RU_KEEP = /\b(war|attack\w*|strikes?|drones?|missiles?|nuclear|weapons?|NATO|Ukrain\w*|Zelensk\w*|Kyiv|Belarus|peace|ceasefire|truce|negotiat\w*|talks|troops|military|army|sanction\w*|tariffs?|oil|gas|diesel|gasoline|fuel|crude|LNG|refiner\w*|pipelines?|energy|OPEC|grain|wheat|fertili[sz]ers?|ruble|rouble|key rate|rate decision|central bank|CBR|Nabiullina|Putin|Kremlin|Peskov|Lavrov|Medvedev|Trump|Witkoff|Rubio|Vance|U\.S\.?|US|USA|United States|America\w*|Washington|China|Chinese|Xi|Iran|India|Europe\w*|EU|gold|bitcoin|BTC|crypto|Lukoil|Rosneft|Gazprom|Novatek|Transneft|escalat\w*|threat\w*|retaliat\w*|respon\w*|warn\w*|border|invad\w*|security|defen[cs]e|diplomat\w*|embass\w*|spy|spies|cyber\w*|hack\w*|Moldova|Baltic\w*|Poland|Polish|Finland|German\w*|Britain|UK|France|French|Japan)\b/i;
 export function russiaLocal(title: string) { return RU_CONTEXT.test(title) && !RU_KEEP.test(title) && !MOVERS.test(title) && !MAG7.test(title) && !FOREIGN_LEADER.test(title); }
 // weekly natural-gas storage ("US Natural Gas Supplies Fall 24 BCF") is routine data, never a HIGH ALERT on a channel's 🚨 alone
 const ROUTINE_ALERT = /\b(BCF|natural gas (?:storage|supplies|inventor\w*|stocks))\b/i;
+// a leaders' meeting announced ("Trump, Rutte Meet on Ukraine War, Iran Conflict") is not a HIGH ALERT by itself — what they decide is;
+// Fed/FOMC/OPEC meetings and anything matching HIGH_ALERT_RE (strikes, tariffs, rate moves…) still alert
+const MEETING_ONLY = /\b(meet|meets|meeting|to meet|hold talks)\b/i;
+const MEETING_KEEP = /\b(Fed|FOMC|Powell|Warsh|OPEC\+?|ECB|BoJ|rates?|strikes?|struck|attack\w*|missiles?|drones?|explosions?|blasts?|killed|invad\w*|tariffs?|sanction\w*|ceasefire|deal|agree\w*|emergency|hikes?|cuts?|defaults?|downgrade|declares?)\b/i;
 export function alertWorthy(title: string) {
   if (HIGH_ALERT_RE.test(title) && !russiaLocal(title)) return true;
   if (russiaLocal(title) || ROUTINE_ALERT.test(title)) return false;
+  if (MEETING_ONLY.test(title) && !MEETING_KEEP.test(title) && !MAG7.test(title)) return false; // MOVERS' bare "war" ("Meet on Ukraine War") is not enough
   return MOVERS.test(title) || MAG7.test(title) || ALERT_TOPICS.test(title);
 }
 // Extra noise filter on top of classify(): analyst price targets outside Mag 7, and long speech barrages from one speaker
@@ -1005,7 +1010,7 @@ export function cleanChannelText(raw: string) {
   const lines = raw.split("\n").map((l) => stripHandles(l.trim())).filter((l) => l && !PROMO_RE.test(l));
   if (!lines.length) return { text: "", alert: false };
   const alert = /^\s*(?:🚨|‼️|BREAKING)/iu.test(lines[0]);
-  lines[0] = lines[0].replace(LEAD_RE, "").trim();
+  lines[0] = lines[0].replace(LEAD_RE, "").replace(/^Headline:\s*/i, "").trim(); // marketsAlpha "Headline: …" label
   return { text: lines.filter(Boolean).join("\n").trim(), alert };
 }
 

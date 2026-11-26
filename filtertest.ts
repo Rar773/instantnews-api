@@ -104,6 +104,13 @@ for (const [t, want] of [["Russia's inflation rate for the week of November 17 t
 for (const [t, want] of [["🇷🇺 MGKL Climbs 12% Amid New Defaults", false], ["Headline: US Natural Gas Supplies Fall 24 BCF, Worse Than Expected", false], ["Russia declares war on Moldova", true], ["Russian missile strike hits Kyiv", true], ["US crude inventories fall 5M barrels, oil jumps", true], ["Coreweave Banks Prepare $4.5 Billion Loan Sale as Default Fears Surge $CRWV", true], ["Argentina defaults on bonds", true]] as const)
   if (m.alertWorthy(t) !== want) { bad++; console.log("FAIL alertWorthy", want, "|", t); }
 if (m.classify(it("🇷🇺 MGKL Climbs 12% Amid New Defaults")).highAlert || !m.classify(it("Argentina defaults on bonds")).highAlert) { bad++; console.log("FAIL classify Russia-local alert"); }
+// a leaders' meeting is not a HIGH ALERT on a channel's 🚨; Fed/OPEC meetings, strikes during talks, deals still are
+for (const [t, want] of [["Trump, Rutte Meet on Ukraine War, Iran Conflict", false], ["Trump to meet Xi next week", false], ["Fed holds emergency meeting", true], ["OPEC+ meeting: members agree to cut output", true], ["Iran fires missiles at US base as Trump meets Netanyahu", true], ["Trump, Xi agree trade deal at meeting", true], ["Nvidia CEO meets Trump on chip curbs $NVDA", true]] as const)
+  if (m.alertWorthy(t) !== want) { bad++; console.log("FAIL alertWorthy meeting", want, "|", t); }
+// Aeroflot domestic news is Russia local; Aeroflot + sanctions/drones still passes. "Headline:" label removed.
+if (m.noiseReason("Headline: Aeroflot to start selling subsidized 2027 airfare tickets December 1", false) !== "Russia local") { bad++; console.log("FAIL Aeroflot local"); }
+if (m.noiseReason("US sanctions Aeroflot over Ukraine", false) || m.noiseReason("Drones force Aeroflot to halt Moscow flights", false)) { bad++; console.log("FAIL Aeroflot keep"); }
+if (m.cleanChannelText("Headline: Aeroflot to start selling tickets").text !== "Aeroflot to start selling tickets" || m.cleanChannelText("Headline inflation rises 3%").text !== "Headline inflation rises 3%") { bad++; console.log("FAIL Headline label"); }
 // same story worded with plural/singular differences is a duplicate; separate S&P follow-ups and outlet-only words still behave
 {
   const T = Date.now() + 3e11;

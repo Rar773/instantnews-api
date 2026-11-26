@@ -185,4 +185,25 @@ for (const t of ["Oil hits highest since the Iran war began", "US strikes Iran a
 // State Duma domestic bills are Russia local; Duma on Ukraine/US/sanctions still passes
 if (m.noiseReason("State Duma Backs Bill to Speed Up Pre-Bankruptcy Rehabilitation", false) !== "Russia local") { bad++; console.log("FAIL Duma local"); }
 for (const t of ["State Duma ratifies treaty on Ukraine ceasefire", "Duma approves retaliation against US sanctions"]) if (m.noiseReason(t, false, Date.now() + 6e10)) { bad++; console.log("FAIL Duma keep |", t); }
+// 26 Nov (17:40): Truth Social / "- Official." / "- EU Diplomats." / leading "Al-Hadath reported that" are sources; normal text stays
+{
+  const sa: [string, string][] = [
+    ["Trump: There's a strong chance Russia pulls back military aggression - Truth Social.", "Trump: There's a strong chance Russia pulls back military aggression"],
+    ["The UK and EU haven't agreed on a penalty fee to leave the new deal - Official.", "The UK and EU haven't agreed on a penalty fee to leave the new deal"],
+    ["EU leaders set to confirm backing for Spain's De Cos as next ECB president - EU Diplomats.", "EU leaders set to confirm backing for Spain's De Cos as next ECB president"],
+    ["Al-Hadath reported that the US is working to arrange a meeting between Trump and Netanyahu", "The US is working to arrange a meeting between Trump and Netanyahu"],
+    ["Trump posts on Truth Social: tariffs on EU start Monday", "Trump posts on Truth Social: tariffs on EU start Monday"],
+    ["Fed officials say that rates will stay on hold", "Fed officials say that rates will stay on hold"],
+    ["Iran expels EU diplomats after strikes", "Iran expels EU diplomats after strikes"],
+    ["Senior US official to visit Kyiv next week", "Senior US official to visit Kyiv next week"],
+    ["Contact news@instantnews.io for corrections", "Contact news@instantnews.io for corrections"],
+  ];
+  for (const [i, o] of sa) if (m.stripAttribution(i) !== o) { bad++; console.log("FAIL strip |", i, "->", m.stripAttribution(i)); }
+}
+// ECB accounts commentary is no HIGH ALERT; real rate decisions still are
+if (m.classify(it("ECB officials: Transmission of rate hikes is working smoothly")).highAlert) { bad++; console.log("FAIL ECB accounts alert"); }
+for (const t of ["ECB rate decision: raises rates to 2.50%", "BoE officials: emergency rate hike of 50bp", "Fed delivers surprise rate hike"]) if (!m.classify(it(t)).highAlert) { bad++; console.log("FAIL rate alert lost |", t); }
+// Russian AI conference lines skipped; Putin on war/US/oil/chips still passes
+for (const t of ["Putin Calls for Update to Russia's National AI Strategy", "Putin Warns AI Could Become a Dangerous Threat to Humanity", "🚀 Russia aims for the widespread implementation of artificial intelligence (AI) across all sectors"]) if (!/^Russia (AI|local)$/.test(m.noiseReason(t, false) || "")) { bad++; console.log("FAIL Russia AI |", t); }
+for (const t of ["Putin: AI drones will be used in Ukraine war", "Putin says US AI chip curbs will backfire", "Russia bans Nvidia AI chips", "OpenAI to open office in Europe"]) if (m.noiseReason(t, false, Date.now() + 5e10)) { bad++; console.log("FAIL Russia AI too wide |", t); }
 console.log(bad ? `${bad} failures` : "all filter cases OK"); if (bad) process.exit(1);

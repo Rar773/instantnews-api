@@ -261,6 +261,9 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
     if (/\bRussia(n|[’']s)?\b/i.test(title) && /\b(inflation|CPI|consumer prices)\b/i.test(title) && !MOVERS.test(title) && !/\b(oil|gas|crude|ruble|rouble|rate decision|key rate)\b/i.test(title)) return "Russia inflation";
     // Russian domestic business/trade news with no war, sanctions, energy, CBR or US/China angle (3× in one evening)
     if (russiaLocal(title) && !HIGH_ALERT_RE.test(title)) return "Russia local";
+    // Russian AI conference / national AI strategy lines ("Putin Calls for Update to Russia's National AI Strategy", "Putin Warns AI Could Become
+    // a Dangerous Threat to Humanity", Sberbank AI Journey — 4× on 26 Nov); anything with war, US, sanctions, oil, chips/Nvidia still passes
+    if (/\b(Putin|Kremlin|Russia|Russian|Russia[’']s|Sber\w*)\b|🇷🇺/iu.test(title) && /\b(AI|artificial intelligence)\b/i.test(title) && !MAG7.test(title) && !/\b(chips?|semiconductors?)\b/i.test(title) && !RU_KEEP.test(title.replace(/\b(Putin|Kremlin|Peskov|threat\w*|warn\w*|danger\w*)\b/gi, ""))) return "Russia AI";
     // logistics of Putin's yearly Q&A ("Kremlin Schedules Putin Live Q&A…", "Questions for Putin to be accepted via VK…", 2× on 26 Nov);
     // what Putin SAYS there (war, ceasefire, US, oil…) still passes
     if (/\bPutin\b/i.test(title) && /\b(Q&A|Q ?& ?A|Direct Line|questions?|press conference|phone-in)\b/i.test(title) && /\b(schedul\w*|to be (?:held|accepted)|accepted|submit\w*|chatbot|VK|Odnoklassniki|will hold|to hold|date)\b/i.test(title) && !RU_KEEP.test(title.replace(/\b(Putin|Kremlin)\b/gi, ""))) return "Putin Q&A logistics";
@@ -340,7 +343,10 @@ export function classify(it: Item): Classified {
   else if (/\bauction\b|bid[- ]to[- ]cover/i.test(full)) kind = "auction";
   else if (/\bActual\b/i.test(full) || (/\bForecast\b/i.test(full) && /\bPrevious\b/i.test(full))) kind = "economic";
   // a Russian company's "defaults" (MGKL) still posts, but not as a HIGH ALERT
-  return { skip: false, kind, highAlert: HIGH_ALERT_RE.test(t) && !russiaLocal(t) };
+  // foreign CB meeting accounts ("ECB officials: Transmission of rate hikes is working smoothly", 26 Nov) matched "rate hike" — commentary, no HIGH ALERT;
+  // an actual decision / emergency move still alerts
+  const cbAccounts = FOREIGN_CB.test(t) && /^[^:]{0,40}\b(officials|members|policymakers|minutes|accounts)\b[^:]{0,20}:/i.test(t) && !/\b(emergency|decision|decides?|raises rates|cuts rates|hikes rates)\b/i.test(t);
+  return { skip: false, kind, highAlert: HIGH_ALERT_RE.test(t) && !russiaLocal(t) && !cbAccounts };
 }
 
 // ---------------------------------------------------------------- Claude
@@ -685,7 +691,7 @@ ${original}`, 400, original.length > 200 ? 6000 : 3500);
   return { title: stripAttribution(stripLabel(t)), content: rest.map(stripAttribution).join("\n").trim() };
 }
 // safety net if the model leaves a trailing source: "… - Reuters", "… (Bloomberg)", "…, per WSJ", "…, citing sources"
-const OUTLETS = "Reuters|RTRS|Bloomberg|BBG|WSJ|Wall Street Journal|FT|Financial Times|CNBC|AP|AFP|Axios|NYT|New York Times|Politico|Semafor|Tass|TASS|RIA|IRIB|Fars|Tasnim|Xinhua|Nikkei|Kyodo|Yonhap|Al Arabiya|Al Jazeera|NBC|CBS|ABC|CNN|Fox|BBC|Sky|Dow Jones|MNI|Barron's|The Information|Chosun|JoongAng|Handelsblatt|Interfax|Caixin|SCMP|Jiji|NHK|Asahi|Yomiuri|ANSA|Mehr|IRNA|ISNA|Israel[’']s (?:Channel \\d+|Kan|Army Radio|N12|i24)|Channel 1[234]|Kan News|Ynet|Haaretz|Times of Israel|Jerusalem Post|Maariv|i24 ?News|Army Radio|witness(?:es)?|sources?|officials";
+const OUTLETS = "Reuters|RTRS|Bloomberg|BBG|WSJ|Wall Street Journal|FT|Financial Times|CNBC|AP|AFP|Axios|NYT|New York Times|Politico|Semafor|Tass|TASS|RIA|IRIB|Fars|Tasnim|Xinhua|Nikkei|Kyodo|Yonhap|Al Arabiya|Al Jazeera|NBC|CBS|ABC|CNN|Fox|BBC|Sky|Dow Jones|MNI|Barron's|The Information|Chosun|JoongAng|Handelsblatt|Interfax|Caixin|SCMP|Jiji|NHK|Asahi|Yomiuri|ANSA|Mehr|IRNA|ISNA|Israel[’']s (?:Channel \\d+|Kan|Army Radio|N12|i24)|Channel 1[234]|Kan News|Ynet|Haaretz|Times of Israel|Jerusalem Post|Maariv|i24 ?News|Army Radio|Truth Social|Al[- ]Hadath|Al[- ]Arabiya|witness(?:es)?|sources?|officials?|(?:EU|US|U\\.S\\.|Western|European) diplomats?|diplomats";
 // "… - Reuters", "… | Chosun", "…, per WSJ", "(according to Bloomberg News)", "…, says Reuters". A bare "says"/"reports" (no comma)
 // is a normal sentence ("Powell says officials are united"), and "self-appointed" is not "- AP", so those stay.
 const ATTRIB_RE = new RegExp(String.raw`(?:\s+[-–—]\s*|\s*\|\s*|,?\s*\(?\s*(?:per|via|citing|according to|reported by)\s+|,\s*(?:reports?|says)\s+)(?:${OUTLETS})\b(?:[^.\n]{0,40})?\)?\.?\s*$`, "i");
@@ -700,6 +706,9 @@ export function stripAttribution(line: string) {
   const reportsRe = new RegExp(String.raw`(?:,|\s[-–—])\s*(?:${OUTLETS})\s+(?:reports?|reported|says?|said)\.?\s*$`, "i");
   // "Nvidia pauses chip deliveries to South-east Asia: FT" — a colon followed ONLY by an outlet ("Trump: Fox News treated him unfairly" stays)
   const colonRe = new RegExp(String.raw`\s*:\s*(?:${OUTLETS})(?:\s+(?:News|reports?|says))?\.?\s*$`, "i");
+  // "Al-Hadath reported that the US is working to…" (26 Nov) -> "The US is working to…"; "Officials say…" without "that" stays
+  const leadRe = new RegExp(String.raw`^(?:${OUTLETS})\s+(?:reports?|reported|says?|said)\s+that\s+(?=\S)`, "i");
+  if (leadRe.test(out)) { out = out.replace(leadRe, ""); out = out[0].toUpperCase() + out.slice(1); }
   for (let i = 0; i < 2; i++) out = out.replace(colonRe, "").replace(ATTRIB_RE, "").replace(reportsRe, "").replace(/\s*\((?:Reuters|Bloomberg|AP|AFP|WSJ|CNBC)\)\s*$/i, "").trim();
   return out || line.trim();
 }

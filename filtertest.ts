@@ -150,6 +150,10 @@ for (const [raw, want] of [
   ["Netanyahu to fly to Washington next week - Kan News", "Netanyahu to fly to Washington next week"],
   ["Witness says Iran fired missiles at the base", "Witness says Iran fired missiles at the base"],
   ["Israel's Channel 12 gets new owner", "Israel's Channel 12 gets new owner"],
+  ["Nvidia pauses chip deliveries to South-east Asia: FT", "Nvidia pauses chip deliveries to South-east Asia"],
+  ["Apple weighs China exit: Bloomberg News", "Apple weighs China exit"],
+  ["Trump: Fox News treated me unfairly", "Trump: Fox News treated me unfairly"],
+  ["Powell: Rates are in a good place", "Powell: Rates are in a good place"],
 ] as const) if (m.stripAttribution(raw) !== want) { bad++; console.log("FAIL source strip |", raw, "->", m.stripAttribution(raw)); }
 // foreign leader barrage: max SPEAKER_CAP non-war lines per hour, war/trade lines always pass
 const t1 = Date.now() + 9e10;

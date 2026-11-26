@@ -678,7 +678,9 @@ export function stripAttribution(line: string) {
     if (head !== out.slice(0, out.length - tags.length).trim()) return head + " " + tags.trim().replace(/\s+/g, " ");
   }
   const reportsRe = new RegExp(String.raw`(?:,|\s[-–—])\s*(?:${OUTLETS})\s+(?:reports?|reported|says?|said)\.?\s*$`, "i");
-  for (let i = 0; i < 2; i++) out = out.replace(ATTRIB_RE, "").replace(reportsRe, "").replace(/\s*\((?:Reuters|Bloomberg|AP|AFP|WSJ|CNBC)\)\s*$/i, "").trim();
+  // "Nvidia pauses chip deliveries to South-east Asia: FT" — a colon followed ONLY by an outlet ("Trump: Fox News treated him unfairly" stays)
+  const colonRe = new RegExp(String.raw`\s*:\s*(?:${OUTLETS})(?:\s+(?:News|reports?|says))?\.?\s*$`, "i");
+  for (let i = 0; i < 2; i++) out = out.replace(colonRe, "").replace(ATTRIB_RE, "").replace(reportsRe, "").replace(/\s*\((?:Reuters|Bloomberg|AP|AFP|WSJ|CNBC)\)\s*$/i, "").trim();
   return out || line.trim();
 }
 // Fallback when the rewrite is not available: "$NVDA  - NVIDIA CHIP SELLERS SCRAMBLE…" -> "Nvidia Chip Sellers Scramble… $NVDA"

@@ -196,6 +196,7 @@ const FOREIGN_LEADER = /\b(Merz|Starmer|Macron|Meloni|S[aá]nchez|Carney|Albanes
 const LEADER_KEEP = /\b(Russia|Russian|Putin|Ukrain\w*|Zelensk\w*|war|attack|strike|drones?|missiles?|NATO|troops|military|defen[cs]e|nuclear|China|Chinese|Xi|Iran|Israel|Gaza|trade|tariffs?|United States|America|Trump|Washington|Fed|dollar|oil|gas|energy|bonds?|yields?|markets?|election|resign\w*|no[- ]confidence|collapse)\b/i;
 const SPEAKER_CAP = Number(E.SPEAKER_CAP || 2); // quotes per speaker per hour before only market-moving lines pass
 const SPEAKER_CAP_FOREIGN_CB = Number(E.SPEAKER_CAP_FOREIGN_CB || 1); // BoE/BoC/ECB/BoJ… officials matter less to US traders
+const FOREIGN_CB_INST_CAP = Number(E.FOREIGN_CB_INST_CAP || 3); // all lines from one foreign central bank per hour
 const FOREIGN_CB = /^(BoE|BoC|ECB|BoJ|RBA|RBNZ|SNB|PBoC|Riksbank|Norges|Bank of (England|Canada|Japan))\b/i;
 const FOREIGN_CB_ANY = /\b(BoE|BoC|ECB|BoJ|RBA|RBNZ|SNB|PBoC|Riksbank|Norges ?Bank|Bank of (England|Canada|Japan))\b/i;
 const BROKER_CALL = /\b(expects?|we see|now sees?|forecasts?)\b/i;
@@ -211,7 +212,7 @@ export function speakerOf(title: string) {
 const ALERT_TOPICS = /\b(Fed|FOMC|Powell|Warsh|Treasury|Treasuries|Nasdaq|S&P|Dow|NQ|stocks?|futures|yields?|dollar|oil|crude|Brent|WTI|OPEC|gold|bitcoin|BTC|crypto|Trump|White House|Congress|Pentagon|U\.S\.?|US|USA|United States|America|Iran|Israel|Hormuz|Taiwan|NATO|missiles?|drones?|strikes?|attacks?|troops|military)\b/i;
 // Russian domestic business news (marketsAlpha: "🇷🇺 Levan Nazarov… fintech group", "Russia-Kazakhstan trade nears $30 billion", "MGKL climbs 12% amid defaults").
 // Anything about war/Ukraine/peace talks, sanctions, oil/gas, the CBR rate, Putin/Kremlin, the US/China/Europe or markets still counts.
-const RU_CONTEXT = /🇷🇺|\b(Russia|Russian|Russia[’']s|Moscow|MOEX|Sber|Sberbank|Gref|Aeroflot|Kazakh\w*|Tokaev)\b/iu;
+const RU_CONTEXT = /🇷🇺|\b(Russia|Russian|Russia[’']s|Moscow|MOEX|Sber|Sberbank|Gref|Aeroflot|Kazakh\w*|Tokaev|Tokayev|State Duma|Duma)\b/iu;
 const RU_KEEP = /\b(war|attack\w*|strikes?|drones?|missiles?|nuclear|weapons?|NATO|Ukrain\w*|Zelensk\w*|Kyiv|Belarus|peace|ceasefire|truce|negotiat\w*|talks|troops|military|army|sanction\w*|tariffs?|oil|gas|diesel|gasoline|fuel|crude|LNG|refiner\w*|pipelines?|energy|OPEC|grain|wheat|fertili[sz]ers?|ruble|rouble|key rate|rate decision|central bank|CBR|Nabiullina|Putin|Kremlin|Peskov|Lavrov|Medvedev|Trump|Witkoff|Rubio|Vance|U\.S\.?|US|USA|United States|America\w*|Washington|China|Chinese|Xi|Iran|India|Europe\w*|EU|gold|bitcoin|BTC|crypto|Lukoil|Rosneft|Gazprom|Novatek|Transneft|escalat\w*|threat\w*|retaliat\w*|respon\w*|warn\w*|border|invad\w*|security|defen[cs]e|diplomat\w*|embass\w*|spy|spies|cyber\w*|hack\w*|Moldova|Baltic\w*|Poland|Polish|Finland|German\w*|Britain|UK|France|French|Japan)\b/i;
 // Sberbank CEO "German Gref" is not Germany (26 Nov: "German Gref frequently visits Astana…" passed as if it had a Germany angle)
 export function russiaLocal(title: string) { title = title.replace(/\bGerman(?=\s+Gref\b)/gi, "Herman"); return RU_CONTEXT.test(title) && !RU_KEEP.test(title) && !MOVERS.test(title) && !MAG7.test(title) && !FOREIGN_LEADER.test(title); }
@@ -224,8 +225,11 @@ const POSITIONING_ALERT = /\b(?:clusters? of|wall of)\b[^.]{0,40}\b(?:short|long
 // Fed/FOMC/OPEC meetings and anything matching HIGH_ALERT_RE (strikes, tariffs, rate moves…) still alert
 const MEETING_ONLY = /\b(meet|meets|meeting|to meet|hold talks)\b/i;
 const MEETING_KEEP = /\b(Fed|FOMC|Powell|Warsh|OPEC\+?|ECB|BoJ|rates?|strikes?|struck|attack\w*|missiles?|drones?|explosions?|blasts?|killed|invad\w*|tariffs?|sanction\w*|ceasefire|deal|agree\w*|emergency|hikes?|cuts?|defaults?|downgrade|declares?)\b/i;
+// "since the war began" is only a time reference ("Qatar's LNG Exports Hit Highest Level Since US-Iran War Began", 26 Nov) — drop it before the topic check
+const SINCE_WAR = /\bsince (?:the )?[\w\s'’-]{0,30}?\bwar (?:began|started|broke out|erupted)\b/gi;
 export function alertWorthy(title: string) {
   if (HIGH_ALERT_RE.test(title) && !russiaLocal(title)) return true;
+  title = title.replace(SINCE_WAR, " ");
   if (russiaLocal(title) || ROUTINE_ALERT.test(title)) return false;
   if (POSITIONING_ALERT.test(title) && !/\bliquidat(?:ed|ions? of)\b/i.test(title)) return false;
   if (MEETING_ONLY.test(title) && !MEETING_KEEP.test(title) && !MAG7.test(title)) return false; // MOVERS' bare "war" ("Meet on Ukraine War") is not enough
@@ -277,12 +281,20 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
   const sp = speakerOf(title);
   // Mag 7 headlines are never capped ("Amazon: …" product news was cut by the speaker cap)
   // lines about the Fed (Hassett: "We expect Warsh, and the Fed will be data-driven") are never capped either
-  if (!sp || highAlert || MAG7.test(title) || /\b(Fed|FOMC|Powell|Warsh)\b/.test(title) || ALWAYS_ALLOW.some((k) => title.toLowerCase().includes(k))) return null;
+  if (highAlert || MAG7.test(title) || /\b(Fed|FOMC|Powell|Warsh)\b/.test(title) || ALWAYS_ALLOW.some((k) => title.toLowerCase().includes(k))) return null;
+  // one foreign central bank as a whole: max FOREIGN_CB_INST_CAP lines/h across all its officials and unprefixed headlines
+  // (26 Nov: BoE stability report 8 lines — "BoE warns…", "BoE maintains…", Bailey, Breeden, Braddick; ECB accounts 8 lines — "ECB officials…").
+  // Rate decisions (ALWAYS_ALLOW), hikes/cuts/emergency (MOVERS), Mag 7 and HIGH ALERT lines always pass.
+  const inst = title.match(FOREIGN_CB)?.[1]?.toLowerCase().replace(/^bank of england$/, "boe").replace(/^bank of canada$/, "boc").replace(/^bank of japan$/, "boj");
+  const instTimes = inst ? (speakerLog.get("cb:" + inst) || []).filter((t) => now - t < 60 * 60_000) : [];
+  if (inst && instTimes.length >= FOREIGN_CB_INST_CAP && !MOVERS.test(title)) { speakerLog.set("cb:" + inst, instTimes); return "central bank cap (" + inst + ")"; }
+  const passInst = () => { if (inst) { instTimes.push(now); speakerLog.set("cb:" + inst, instTimes); } return null; };
+  if (!sp) return passInst();
   const times = (speakerLog.get(sp) || []).filter((t) => now - t < 60 * 60_000);
   const cap = FOREIGN_CB.test(title) ? SPEAKER_CAP_FOREIGN_CB : SPEAKER_CAP;
   if (times.length >= cap && !MOVERS.test(title)) { speakerLog.set(sp, times); return "speaker cap (" + sp + ")"; }
   times.push(now); speakerLog.set(sp, times);
-  return null;
+  return passInst();
 }
 // Non-US economic data is skipped, but geopolitics about these countries (e.g. China/Taiwan) still goes through
 const NON_US = [

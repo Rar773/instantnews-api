@@ -168,4 +168,21 @@ for (const t of ["Putin at press conference: Russia ready for ceasefire talks wi
 if (m.alertWorthy("Large cluster of BTC short positions sits between $61,000 and $65,000")) { bad++; console.log("FAIL BTC positioning alert"); }
 for (const t of ["Bitcoin plunges 8% to $58,000", "$1 billion of BTC shorts liquidated as bitcoin jumps above $65,000", "US stocks plunge as Fed hikes"]) if (!m.alertWorthy(t)) { bad++; console.log("FAIL alert lost |", t); }
 if (m.stripLabel("Headline: Kremlin Schedules Putin Live Q&A") !== "Kremlin Schedules Putin Live Q&A" || m.stripLabel("**Headline:** Nvidia halts shipments") !== "Nvidia halts shipments" || m.stripLabel("Headline inflation rises 3%") !== "Headline inflation rises 3%") { bad++; console.log("FAIL stripLabel"); }
+// 26 Nov (12:35): one foreign central bank max 3 lines/h (BoE report 8 lines, ECB accounts 8 lines); rate decisions, hikes, Nvidia, Fed still pass
+{
+  const T = Date.now() + 2e11;
+  const boe = ["BoE: Households and firms resilient, banking system strong", "BoE to focus on pillar 2a charges for domestic lending", "BoE warns AI financing is \"increasingly complex, circular, opaque\"", "BoE maintains countercyclical buffer at 2%", "BoE Gov. Bailey: AI companies are right to be cautious about releasing the latest models", "BoE Gov. Bailey: AI markets are very concentrated; what has gone on at Nvidia is a matter of concern", "BoE Breeden: Need to push hard on boosting resilience of gilt repo market", "Bank of England rate decision: holds rates at 3.75%", "BoE's Greene: A rate hike may be needed", "BoE's Greene: Fed policy matters for UK"].map((x, i) => m.noiseReason(x, false, T + i));
+  const want = [null, null, null, "central bank cap (boe)", "central bank cap (boe)", null, "central bank cap (boe)", null, null, null];
+  if (JSON.stringify(boe) !== JSON.stringify(want)) { bad++; console.log("FAIL CB institution cap", boe); }
+  const ecb = ["ECB: The direction of travel was clear", "ECB Accounts: Uncertainty remained high", "ECB officials agreed in October that the price outlook had worsened", "ECB officials questioned how long AI can support global growth", "ECB: A hike at the current meeting would simply frontload the necessary tightening"].map((x, i) => m.noiseReason(x, false, T + 100 + i));
+  if (ecb[0] || ecb[1] || ecb[2] || !ecb[3] || ecb[4]) { bad++; console.log("FAIL ECB institution cap", ecb); }
+  if (m.noiseReason("ECB officials saw no clear signs of second-round effects", false, T + 100 + 61 * 60_000)) { bad++; console.log("FAIL CB cap window"); }
+  if (m.noiseReason("Lagarde: remark about Europe", false, T + 300) || m.noiseReason("Japan Senior Finance Ministry Official: We will assess bond issuance size", false, T + 301)) { bad++; console.log("FAIL CB cap too wide"); }
+}
+// "since the war began" is a time reference, not a HIGH ALERT; real war/oil news still alerts
+if (m.alertWorthy("Qatar's LNG Exports Hit Highest Level Since US-Iran War Began")) { bad++; console.log("FAIL since-war alert"); }
+for (const t of ["Oil hits highest since the Iran war began", "US strikes Iran as war widens", "Qatar halts LNG exports after Iran attack", "OPEC+ Weighs Holding Oil Output Steady Until January"]) if (!m.alertWorthy(t)) { bad++; console.log("FAIL alert lost |", t); }
+// State Duma domestic bills are Russia local; Duma on Ukraine/US/sanctions still passes
+if (m.noiseReason("State Duma Backs Bill to Speed Up Pre-Bankruptcy Rehabilitation", false) !== "Russia local") { bad++; console.log("FAIL Duma local"); }
+for (const t of ["State Duma ratifies treaty on Ukraine ceasefire", "Duma approves retaliation against US sanctions"]) if (m.noiseReason(t, false, Date.now() + 6e10)) { bad++; console.log("FAIL Duma keep |", t); }
 console.log(bad ? `${bad} failures` : "all filter cases OK"); if (bad) process.exit(1);

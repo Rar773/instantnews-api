@@ -111,6 +111,10 @@ for (const [t, want] of [["Trump, Rutte Meet on Ukraine War, Iran Conflict", fal
 if (m.noiseReason("Headline: Aeroflot to start selling subsidized 2027 airfare tickets December 1", false) !== "Russia local") { bad++; console.log("FAIL Aeroflot local"); }
 if (m.noiseReason("US sanctions Aeroflot over Ukraine", false) || m.noiseReason("Drones force Aeroflot to halt Moscow flights", false)) { bad++; console.log("FAIL Aeroflot keep"); }
 if (m.cleanChannelText("Headline: Aeroflot to start selling tickets").text !== "Aeroflot to start selling tickets" || m.cleanChannelText("Headline inflation rises 3%").text !== "Headline inflation rises 3%") { bad++; console.log("FAIL Headline label"); }
+// a rewrite that shrinks to a stub ("Russia") is rejected; a normal shorter rewrite is kept
+if (!m.rewriteTooShort("🇷🇺 Russia has extended its gasoline export ban until the end of the year", "", "Russia", "")) { bad++; console.log("FAIL stub rewrite"); }
+if (!m.rewriteTooShort("Russia extends gasoline export ban", "The ban now runs until December 31 to keep domestic fuel prices stable after refinery outages.", "Russia extends", "")) { bad++; console.log("FAIL short rewrite"); }
+if (m.rewriteTooShort("Trump Finds New Way to Impose Import Duties", "The USTR announced plans to introduce tariffs against 14 trading partners.", "Trump finds new route to import duties", "USTR plans tariffs on 14 trading partners.")) { bad++; console.log("FAIL normal rewrite rejected"); }
 // same story worded with plural/singular differences is a duplicate; separate S&P follow-ups and outlet-only words still behave
 {
   const T = Date.now() + 3e11;

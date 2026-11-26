@@ -711,6 +711,11 @@ export function isCutOff(title: string) {
   const last = t.split(/\s+/).pop() || "";
   return /^[A-Za-z]$/.test(last) && !/^[AaI]$/.test(last);
 }
+// rewritten text is a stub: headline cut off / under 8 chars, or under a third of the original length
+export function rewriteTooShort(title: string, content: string, rwTitle: string, rwContent: string) {
+  const orig = `${title} ${content}`.trim().length, now = `${rwTitle} ${rwContent}`.trim().length;
+  return isCutOff(rwTitle) || (orig >= 30 && now < orig / 3);
+}
 async function handleItem(it: Item, opts: ItemOpts = {}) {
   const via = opts.via || "feed";
   const c = classify(it);
@@ -727,10 +732,13 @@ async function handleItem(it: Item, opts: ItemOpts = {}) {
   if (!via.startsWith("tg:") && c.kind === "news") it = { ...it, title: stripAttribution(it.title) };
   if (via.startsWith("tg:") && CHANNEL_REWRITE && c.kind === "news") {
     const rw = await rewriteChannelPost(it.title, it.content);
-    if (rw?.title) it = { ...it, title: rw.title, content: rw.content };
+    // a rewrite that shrank to a stub ("Russia" from a longer post, 26 Nov 06:01) is rejected: keep the original wording instead
+    if (rw?.title && !rewriteTooShort(it.title, it.content, rw.title, rw.content)) it = { ...it, title: rw.title, content: rw.content };
     // rewrite failed or was rejected (numbers changed): still drop "- Reuters", "per WSJ"… from the original wording
     else it = { ...it, title: tidyHeadline(stripAttribution(it.title)), content: it.content.split("\n").map((l) => dropInlineSource(stripAttribution(l))).join("\n").trim() };
   }
+  // last check: never post a one-word stub ("Russia") from a channel
+  if (via.startsWith("tg:") && c.kind === "news" && !it.content && isCutOff(it.title)) { stats.skipped++; return log("skip incomplete |", it.title); }
   const credit = opts.sourceName && CHANNEL_CREDIT ? `\n\nSource: ${opts.sourceName}` : ""; // optional source line at the very bottom
   const latency = Math.round((Date.now() - it.pubDate) / 1000);
   const toX = X_MODE === "all" || c.highAlert || c.kind !== "news";

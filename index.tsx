@@ -287,7 +287,9 @@ const DATA_NUM = /\d/, DATA_UNIT = /%|\b(YoY|MoM|QoQ|Y\/Y|M\/M|Q\/Q)\b/i;
 
 const HIGH_ALERT_RE = new RegExp(
   [
-    "earthquake", "tsunami", "terror", "nuclear (?:test|strike|attack|weapon|threat)", "declares? war", "war (?:has )?(?:started|begins)",
+    "earthquake", "tsunami", "terror", "nuclear (?:test|strike|attack|threat)",
+    // bare "nuclear weapon" made Kim Jong Un's routine rhetoric ("status as a nuclear weapons state is irreversible") a HIGH ALERT; only actual use/launch/threats count
+    "(?:use|used|using|launch\\w*|fire[sd]?|detonat\\w*) (?:of )?(?:an? |tactical )?nuclear weapon", "threaten\\w* (?:to use )?nuclear", "declares? war", "war (?:has )?(?:started|begins)",
     "invad", "invasion", "missile (?:strike|attack)", "air ?strikes?", "explosion", "assassinat", "shot (?:dead|at)", "shooting", "shots fired",
     "\\bcoup\\b", "martial law", "state of emergency", "circuit breaker", "trading halt", "halts trading", "\\bdefaults?\\b", "bank (?:failure|collapse)",
     "emergency (?:rate|meeting)", "rate decision", "cuts rates", "raises rates", "rate hike", "rate cut", "sanctions? (?:on|against|imposed)",
@@ -658,7 +660,7 @@ ${original}`, 400, original.length > 200 ? 6000 : 3500);
   return { title: stripAttribution(t), content: rest.map(stripAttribution).join("\n").trim() };
 }
 // safety net if the model leaves a trailing source: "… - Reuters", "… (Bloomberg)", "…, per WSJ", "…, citing sources"
-const OUTLETS = "Reuters|RTRS|Bloomberg|BBG|WSJ|Wall Street Journal|FT|Financial Times|CNBC|AP|AFP|Axios|NYT|New York Times|Politico|Semafor|Tass|TASS|RIA|IRIB|Fars|Tasnim|Xinhua|Nikkei|Kyodo|Yonhap|Al Arabiya|Al Jazeera|NBC|CBS|ABC|CNN|Fox|BBC|Sky|Dow Jones|MNI|Barron's|The Information|Chosun|JoongAng|Handelsblatt|Interfax|Caixin|SCMP|Jiji|NHK|Asahi|Yomiuri|ANSA|Mehr|IRNA|ISNA|sources?|officials";
+const OUTLETS = "Reuters|RTRS|Bloomberg|BBG|WSJ|Wall Street Journal|FT|Financial Times|CNBC|AP|AFP|Axios|NYT|New York Times|Politico|Semafor|Tass|TASS|RIA|IRIB|Fars|Tasnim|Xinhua|Nikkei|Kyodo|Yonhap|Al Arabiya|Al Jazeera|NBC|CBS|ABC|CNN|Fox|BBC|Sky|Dow Jones|MNI|Barron's|The Information|Chosun|JoongAng|Handelsblatt|Interfax|Caixin|SCMP|Jiji|NHK|Asahi|Yomiuri|ANSA|Mehr|IRNA|ISNA|Israel[’']s (?:Channel \\d+|Kan|Army Radio|N12|i24)|Channel 1[234]|Kan News|Ynet|Haaretz|Times of Israel|Jerusalem Post|Maariv|i24 ?News|Army Radio|witness(?:es)?|sources?|officials";
 // "… - Reuters", "… | Chosun", "…, per WSJ", "(according to Bloomberg News)", "…, says Reuters". A bare "says"/"reports" (no comma)
 // is a normal sentence ("Powell says officials are united"), and "self-appointed" is not "- AP", so those stay.
 const ATTRIB_RE = new RegExp(String.raw`(?:\s+[-–—]\s*|\s*\|\s*|,?\s*\(?\s*(?:per|via|citing|according to|reported by)\s+|,\s*(?:reports?|says)\s+)(?:${OUTLETS})\b(?:[^.\n]{0,40})?\)?\.?\s*$`, "i");
@@ -670,7 +672,7 @@ export function stripAttribution(line: string) {
     const head = stripAttribution(out.slice(0, out.length - tags.length));
     if (head !== out.slice(0, out.length - tags.length).trim()) return head + " " + tags.trim().replace(/\s+/g, " ");
   }
-  const reportsRe = new RegExp(String.raw`(?:,|\s[-–—])\s*(?:${OUTLETS})\s+(?:reports?|reported|says|said)\.?\s*$`, "i");
+  const reportsRe = new RegExp(String.raw`(?:,|\s[-–—])\s*(?:${OUTLETS})\s+(?:reports?|reported|says?|said)\.?\s*$`, "i");
   for (let i = 0; i < 2; i++) out = out.replace(ATTRIB_RE, "").replace(reportsRe, "").replace(/\s*\((?:Reuters|Bloomberg|AP|AFP|WSJ|CNBC)\)\s*$/i, "").trim();
   return out || line.trim();
 }

@@ -92,6 +92,12 @@ if (!capped[3]) { bad++; console.log("FAIL non-Mag7 speaker cap no longer works"
 const t2 = Date.now() + 7e10;
 const hs = ["WH Sr. Adviser Hassett: Oil heading back to pre-war levels.", "WH Sr. Adviser Hassett: The fundamentals are very strong.", "WH Sr. Adviser Hassett: We expect Warsh, and the Fed will be data-driven.", "WH Sr. Adviser Hassett: We're in a Goldilocks economy."].map((t, i) => m.noiseReason(t, false, t2 + i));
 if (hs[2] || !hs[3]) { bad++; console.log("FAIL Fed line speaker cap", hs); }
+// Kim Jong Un nuclear-status rhetoric is no HIGH ALERT (and gets speaker-capped); actual nuclear use/launch/tests/threats still are
+for (const [t, want] of [["North Korea's Kim Jong Un: North Korea's status as a nuclear weapons state is absolutely irreversible", false], ["North Korea's Kim Jong Un: Nuclear weapons sector should focus on deploying tactical nuclear weapons", false], ["Russia threatens to use nuclear weapons against NATO", true], ["North Korea launches nuclear weapon test", true], ["North Korea conducts nuclear test", true], ["Russia fires tactical nuclear weapon at Ukraine", true], ["Iran warns of nuclear strike", true]] as const)
+  if (m.classify(it(t)).highAlert !== want) { bad++; console.log("FAIL nuclear highAlert", want, "|", t); }
+const t3 = Date.now() + 8e10;
+const kim = ["North Korea's Kim Jong Un: Hostile forces' efforts will intensify", "North Korea's Kim Jong Un: Nuclear material production capacity is being expanded", "North Korea's Kim Jong Un: North Korea's status as a nuclear weapons state is absolutely irreversible"].map((t, i) => m.noiseReason(t, m.classify(it(t)).highAlert, t3 + i));
+if (!kim[2] || kim[0] || kim[1]) { bad++; console.log("FAIL Kim speaker cap", kim); }
 // a channel's 🚨 only makes a HIGH ALERT for market-moving headlines
 for (const [t, want] of [["Russia's inflation rate for the week of November 17 to 23 reached 0.3%", false], ["Peru's central bank keeps outlook unchanged", false], ["Nasdaq 100 enters bear market", true], ["Iran says tanker hit a mine in Hormuz", true], ["Nvidia shares fall 8%", true], ["US 10-year yield jumps 15 bp", true], ["ECB raises rates by 25bp", true]] as const)
   if (m.alertWorthy(t) !== want) { bad++; console.log("FAIL alertWorthy", want, "|", t); }
@@ -127,6 +133,12 @@ for (const [raw, want] of [
   ["NVIDIA shares fall 8% $NVDA", "NVIDIA shares fall 8% $NVDA"],
   ["Apple and Microsoft rally $AAPL $MSFT", "Apple and Microsoft rally $AAPL $MSFT"],
   ["Mehr says Iran will retaliate", "Mehr says Iran will retaliate"],
+  ["Several loud booms were heard in Riyadh - Witness.", "Several loud booms were heard in Riyadh"],
+  ["Explosions heard near the port, witnesses say", "Explosions heard near the port"],
+  ["Kushner: Israel needs to move away from a war mentality - Israel's Channel 12", "Kushner: Israel needs to move away from a war mentality"],
+  ["Netanyahu to fly to Washington next week - Kan News", "Netanyahu to fly to Washington next week"],
+  ["Witness says Iran fired missiles at the base", "Witness says Iran fired missiles at the base"],
+  ["Israel's Channel 12 gets new owner", "Israel's Channel 12 gets new owner"],
 ] as const) if (m.stripAttribution(raw) !== want) { bad++; console.log("FAIL source strip |", raw, "->", m.stripAttribution(raw)); }
 // foreign leader barrage: max SPEAKER_CAP non-war lines per hour, war/trade lines always pass
 const t1 = Date.now() + 9e10;

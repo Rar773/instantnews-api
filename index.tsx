@@ -920,7 +920,8 @@ ${list}`,
   const tg = await tgMedia(img, text);
   await tgPin(tg?.result?.message_id);
   await xPost(text, img, true);
-  log("digest posted");
+  log("digest posted", `claude=${out.length} items=${items.length} sent=${text.length} tgOk=${!!tg?.ok} tgCaption=${tg?.result?.caption?.length ?? "-"} tgText=${tg?.result?.text?.length ?? "-"}`, tg?.ok ? "" : String(tg?.description || "").slice(0, 200));
+  log("digest text", JSON.stringify(text).slice(0, 1500));
 }
 
 type CalEvent = { title: string; country: string; date: string; impact: string; forecast: string; previous: string };

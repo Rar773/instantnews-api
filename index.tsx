@@ -187,6 +187,8 @@ const SKIP = [
   // low-value routine items (Telegram readers asked for less noise)
   "Fed bids for", "Treasury WI", "WATCH LIVE", "Watch live", "Redbook", "ADP Wkly", "Fear & Greed", "Bid-to-Cover", "recruits",
   "to auction $", "bills on", "to offer NZ$", "Live stream", "LIVE:", "with it overnight", "press conference ends",
+  // civil-defence all-clear notices ("Saudi civil defence: danger has passed in Abha city"); the threat warning itself still passes
+  "danger has passed",
 ];
 const MAG7 = /\$(AAPL|MSFT|NVDA|GOOGL?|AMZN|META|TSLA)\b|\b(Apple|Microsoft|Nvidia|Alphabet|Google|Amazon|Meta|Tesla)\b/i;
 // Market-moving words: a speaker who has already been quoted several times still gets through with these
@@ -304,7 +306,7 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
 const NON_US = [
   "German", "Germany", "French", "France", "Italian", "Spanish", "Spain", "Eurozone", "Euro Zone", "ECB", "BoC", "Bank of Canada",
   "Swiss", "Switzerland", "Swedish", "Norway", "Norwegian", "Danish", "Denmark", "Australian", "Australia", "RBA", "New Zealand",
-  "RBNZ", "Japanese", "Japan", "BoJ", "Chinese", "China", "PBoC", "Korean", "BoK", "Indian", "RBI", "Brazilian", "Turkish", "TCMB",
+  "RBNZ", "Japanese", "Japan", "Tokyo", "BoJ", "Chinese", "China", "PBoC", "Korean", "BoK", "Indian", "RBI", "Brazilian", "Turkish", "TCMB",
   "Canadian", "British", "UK ", "BoE", "Dutch", "Netherlands", "Belgian", "Belgium", "Austrian", "Austria", "Portuguese", "Portugal",
   "Finnish", "Finland", "Greek", "Greece", "Czech", "Hungary", "Polish", "Poland", "Romanian", "Romania", "Mexican",
 ];

@@ -216,4 +216,7 @@ for (const t of ["Putin: AI drones will be used in Ukraine war", "Putin says US 
   if (m.noiseReason("📈 AFK Sistema reported a 5.1% increase in revenue for the third quarter, reaching 373.3 billion rubles", false, T) !== "Russia local") { bad++; console.log("FAIL AFK Sistema"); }
   if (m.noiseReason("AFK Sistema hit by new US sanctions", false, T + 4e9)) { bad++; console.log("FAIL AFK Sistema sanctions"); }
 }
+// 27 Nov (01:40): Tokyo CPI is Japanese data; Saudi all-clear notices are noise. Tokyo geopolitics, the threat warning and US CPI still pass
+for (const t of ["Tokyo Core CPI YoY Actual 2.9% (Forecast 2.9%, Previous 2.6%)", "Tokyo CPI Overall Actual 2.8% (Forecast 3.1%, Previous 2.8%)", "Saudi civil defence: danger has passed in Abha city"]) if (!m.classify(it(t)).skip) { bad++; console.log("FAIL not skipped |", t); }
+for (const t of ["Saudi Arabia issues warning of potential threat in Abha city", "Tokyo says China fired missiles near Japanese waters", "US CPI YoY Actual 2.9% (Forecast 2.9%, Previous 2.6%)", "BoJ rate decision: Tokyo raises rates to 1%"]) if (m.classify(it(t)).skip) { bad++; console.log("FAIL wrongly skipped |", t); }
 console.log(bad ? `${bad} failures` : "all filter cases OK"); if (bad) process.exit(1);

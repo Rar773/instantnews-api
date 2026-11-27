@@ -285,6 +285,13 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
     // logistics of Putin's yearly Q&A ("Kremlin Schedules Putin Live Q&A…", "Questions for Putin to be accepted via VK…", 2× on 26 Nov);
     // what Putin SAYS there (war, ceasefire, US, oil…) still passes
     if (/\bPutin\b/i.test(title) && /\b(Q&A|Q ?& ?A|Direct Line|questions?|press conference|phone-in)\b/i.test(title) && /\b(schedul\w*|to be (?:held|accepted)|accepted|submit\w*|chatbot|VK|Odnoklassniki|will hold|to hold|date)\b/i.test(title) && !RU_KEEP.test(title.replace(/\b(Putin|Kremlin)\b/gi, ""))) return "Putin Q&A logistics";
+    // Russian companies' periodic results in rubles ("Transneft Nine-Month IFRS Profit Falls to 46.2 Billion Rubles", "Gazprom Neft Reports 495
+    // Billion Ruble Profit for Nine Months", "Gazprom posted a third-quarter net profit of 247 billion rubles under IFRS", 27 Nov) — the company
+    // name kept them out of "Russia local"; lines with sanctions, war, the US/China, oil prices or exports, gas flows still pass
+    if (/\b(rubles?|roubles?)\b/i.test(title) && /\b(IFRS|RAS|profit|revenue|net income|earnings|EBITDA|loss)\b/i.test(title) && !MOVERS.test(title) && !RU_KEEP.test(title.replace(/\b(rubles?|roubles?|Gazprom(?: Neft)?|Transneft|Lukoil|Rosneft|Novatek)\b/gi, ""))) return "Russian company results";
+    // Putin's ceremonial appearances ("President Putin Arrives in Severodvinsk", "Putin attends flag-raising ceremony for new nuclear submarine
+    // Perm", "Putin will hold a meeting on the development of the Navy's…", 27 Nov, 5 lines in 20 min); what he says on war/US/oil still passes
+    if (/\bPutin\b/i.test(title) && /\b(?:arrives?|arrived) (?:in|at)\b|\battend(?:s|ed)?\b|\bflag[- ]raising\b|\bceremon(?:y|ies)\b|\bwill hold a meeting on\b/i.test(title) && !RU_KEEP.test(title.replace(/\b(Putin|President|Kremlin|nuclear(?= sub\w*)|military)\b/gi, ""))) return "Putin ceremony";
     // "WH Sr. Adviser Hassett's interview on Fox Business ends." — end of a TV interview says nothing; Fed/Powell lines stay
     if (/\binterview\b/i.test(title) && /\b(ends|ended|concludes|concluded|is over|wraps up)\b/i.test(title) && !/\b(Fed|FOMC|Powell)\b/i.test(title)) return "interview ends";
     // EU seven-year (MFF) budget haggling ("🇪🇺 European leaders have failed to reach an agreement on the seven-year budget", 27 Nov) — leader

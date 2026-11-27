@@ -259,4 +259,15 @@ for (const t of ["Saudi Arabia issues warning of potential threat in Abha city",
   for (const t of ["✨ Cryptorank has released a report highlighting the leading networks by trading volume of", "✨ Cryptorank has released a report detailing the largest tokens by growth and decline over"]) if (m.noiseReason(t, false, T) !== "crypto ranking report") { bad++; console.log("FAIL cryptorank |", t); }
   for (const t of ["Cryptorank: exchange hack drains $200 million", "Bitcoin ETF inflows top $1 billion"]) if (m.noiseReason(t, false, T + 1e9)) { bad++; console.log("FAIL cryptorank too wide |", t); }
 }
+// 27 Nov (17:40): Russian company results in rubles and Putin's ceremonial appearances skipped; sanctions/oil/US lines and his statements still pass
+{
+  const T = Date.now() + 2e11;
+  for (const t of ["Transneft Nine-Month IFRS Profit Falls to 46.2 Billion Rubles", "Gazprom Neft Reports 495 Billion Ruble Profit for Nine Months", "Gazprom posted a third-quarter net profit of 247 billion rubles under IFRS."])
+    if (m.noiseReason(t, false, T) !== "Russian company results") { bad++; console.log("FAIL RU results |", m.noiseReason(t, false, T), "|", t); }
+  for (const t of ["President Putin Arrives in Severodvinsk", "Putin attends flag-raising ceremony for new nuclear submarine \"Perm\"", "Putin will hold a meeting on the development of the Navy's multi-purpose nuclear submarine fleet"])
+    if (m.noiseReason(t, false, T) !== "Putin ceremony") { bad++; console.log("FAIL Putin ceremony |", m.noiseReason(t, false, T), "|", t); }
+  for (const t of ["Gazprom profit plunges to 247 billion rubles as EU gas exports collapse", "Rosneft revenue falls 30% to 2 trillion rubles on US sanctions and lower oil prices", "Lukoil net loss of 100 billion rubles after Ukrainian drone strikes on refineries",
+    "Putin arrives in Beijing for talks with Xi", "Putin arrives in Alaska for summit with Trump", "Putin attends meeting on Ukraine ceasefire proposal", "Putin: Russia will respond to any NATO attack", "Gazprom halts gas flows to Europe"])
+    if (m.noiseReason(t, false, T + 3e9)) { bad++; console.log("FAIL too wide |", t); }
+}
 console.log(bad ? `${bad} failures` : "all filter cases OK"); if (bad) process.exit(1);

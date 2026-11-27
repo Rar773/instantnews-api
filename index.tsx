@@ -592,24 +592,22 @@ async function formatImbalance(it: Item) {
   const vals = parseImbalance(it.content || it.title);
   const known = Object.entries(vals).filter(([, v]) => v !== null) as [string, number][];
   const dataLine = known.map(([k, v]) => `${k}: ${fmtM(v)}`).join(", ");
-  const raw = await claude(
-    `You are a financial analyst writing for institutional traders. ${type} (Market ${type === "MOO" ? "on Open" : "on Close"}) imbalance figures (positive = buy imbalance, negative = sell imbalance):
+  const when = type === "MOO" ? "the open" : "the close";
+  const raw = known.length && await claude(
+    `You are a financial analyst writing for institutional traders in US index futures (mainly Nasdaq/NQ). ${type} (Market ${type === "MOO" ? "on Open" : "on Close"}) imbalance figures (positive = buy imbalance, negative = sell imbalance):
 ${dataLine}
 
-Return ONLY valid JSON, no markdown:
-{"S&P 500":"...","Nasdaq 100":"...","Dow 30":"...","Mag 7":"...","bottom":"..."}
-Each index value: 1 direct sentence, max 80 characters, about what this imbalance means for traders at the ${type === "MOO" ? "open" : "close"}. Respect the sign: negative = selling pressure.
-"bottom": 2 sentences max, under 180 characters total, the trading takeaway${type === "MOC" ? " including what it may mean for tomorrow's open" : ""}.`,
-    600, 9000,
+Write ONE connected commentary that explains how these numbers fit together, not one line per index: compare the indices with each other (size and direction, e.g. Nasdaq vs Dow, Mag 7's share of the Nasdaq/S&P flow, rotation or broad-based pressure, any divergence), say what it means for price action at ${when}${type === "MOC" ? " and what it may mean for tomorrow's open" : ""}, and end with the trading takeaway.
+Rules: 3-4 sentences, under 450 characters total, plain English, no headings, no bullet points, no emoji, no markdown. Respect the signs (negative = selling pressure) and do not invent numbers or reasons that are not in the data. Output only the commentary.`,
+    500, 12000,
   );
-  let a: Record<string, string> = {};
-  try { a = JSON.parse((raw || "").replace(/```json|```/g, "").match(/\{[\s\S]*\}/)?.[0] || "{}"); } catch {}
-  const lines = known.map(([k, v]) => `${dot(v)} ${k} at ${fmtM(v)}${a[k] ? " — " + a[k] : ""}`);
-  let text = `🇺🇸 ${type} Imbalance — ${usDate()}\n\n${lines.join("\n\n")}`;
-  if (a.bottom) text += `\n\nBottom line: ${a.bottom}`;
+  const story = (raw || "").replace(/```\w*|```/g, "").replace(/^["“]|["”]$/g, "").replace(/\s*\n+\s*/g, " ").trim().slice(0, 700);
+  const lines = known.map(([k, v]) => `${dot(v)} ${k}: ${fmtM(v)}`);
+  let text = `🇺🇸 ${type} Imbalance — ${usDate()}\n\n${lines.join("\n")}`;
+  if (story) text += `\n\n${story}`;
   if (!known.length) text += `\n\n${it.content}`;
   if (db) {
-    const analysis = lines.join("\n\n") + (a.bottom ? `\n\nBottom line: ${a.bottom}` : "");
+    const analysis = lines.join("\n") + (story ? `\n\n${story}` : "");
     await db`INSERT INTO imbalances (type, sp500, nasdaq, dow30, mag7, claude_analysis) VALUES (${type}, ${vals["S&P 500"] ?? 0}, ${vals["Nasdaq 100"] ?? 0}, ${vals["Dow 30"] ?? 0}, ${vals["Mag 7"] ?? 0}, ${analysis})`.catch((e) => log("db imb", String(e)));
   }
   return { type, text };

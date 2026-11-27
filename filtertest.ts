@@ -229,4 +229,22 @@ for (const t of ["Saudi Arabia issues warning of potential threat in Abha city",
   if (m.dropTitleSource("According to the Kremlin, talks with the US will resume") !== "Talks with the US will resume") { bad++; console.log("FAIL title source lead"); }
   for (const t of ["Iran talks going according to plan, says Araghchi", "Contact press@example.com for details"]) if (m.dropTitleSource(t) !== t) { bad++; console.log("FAIL title source too wide |", t); }
 }
+// 27 Nov (09:35): Russian company default (MGKL) still posts but is not a HIGH ALERT nor "economic" (so it gets rewritten, source dropped); sovereign defaults, rubles noise,
+// BTC positioning commentary, emoji-led "According to X," in fallback headlines
+{
+  const T = Date.now() + 9e10;
+  const mg = "📈🇷🇺 MGKL rises by 2%. According to Vedomosti, MGKL has encountered its fifth actual default on bonds";
+  if (m.alertWorthy(mg) || m.classify(it(mg)).highAlert || m.classify(it(mg)).kind !== "news") { bad++; console.log("FAIL MGKL alert/kind"); }
+  if (m.noiseReason(mg, false, T)) { bad++; console.log("FAIL MGKL should still post (no alert)"); }
+  if (m.noiseReason("Diasoft Posts First-Half 2026 Net Profit of 374M Rubles, Up 311%", false, T) !== "Russia local") { bad++; console.log("FAIL rubles local"); }
+  for (const t of ["Russia defaults on its foreign debt for the first time since 1918", "Russian ruble plunges 5% against the dollar", "Russia's oil revenue falls to 500 billion rubles as sanctions bite", "Evergrande defaults on dollar bonds"]) if (m.noiseReason(t, false, T + 1e9)) { bad++; console.log("FAIL too wide |", t); }
+  if (!m.alertWorthy("Russia defaults on its foreign debt")) { bad++; console.log("FAIL sovereign default alert"); }
+  if (m.classify(it("US Initial Jobless Claims Actual 220K (Forecast 225K, Previous 230K)")).kind !== "economic") { bad++; console.log("FAIL economic kind"); }
+  for (const t of ["Large cluster of BTC short positions sits between $61,000 and $65,000", "Bitcoin Short Positions Cluster Between $61,000 and $65,000"]) if (m.noiseReason(t, false, T) !== "positioning commentary") { bad++; console.log("FAIL positioning |", t); }
+  for (const t of ["$1B of BTC shorts liquidated as Bitcoin jumps 8%", "Bitcoin falls below $60,000", "Hedge funds build record short positions in Treasuries futures"]) if (m.noiseReason(t, false, T + 2e9)) { bad++; console.log("FAIL positioning too wide |", t); }
+  const e = m.dropTitleSource("🛢 According to Energy Aspects, oil stockpiling will play a crucial role in supporting prices");
+  if (e !== "🛢 Oil stockpiling will play a crucial role in supporting prices") { bad++; console.log("FAIL emoji source |", e); }
+  if (m.dropInlineSource("📈 According to CNBC's sources, an unusually large order") !== "📈 An unusually large order") { bad++; console.log("FAIL emoji inline source"); }
+  for (const t of ["🛢 Oil rises, going according to plan", "📧 Contact press@example.com for details"]) if (m.dropTitleSource(t) !== t) { bad++; console.log("FAIL emoji source too wide |", t); }
+}
 console.log(bad ? `${bad} failures` : "all filter cases OK"); if (bad) process.exit(1);

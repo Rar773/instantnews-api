@@ -214,15 +214,19 @@ export function speakerOf(title: string) {
 const ALERT_TOPICS = /\b(Fed|FOMC|Powell|Warsh|Treasury|Treasuries|Nasdaq|S&P|Dow|NQ|stocks?|futures|yields?|dollar|oil|crude|Brent|WTI|OPEC|gold|bitcoin|BTC|crypto|Trump|White House|Congress|Pentagon|U\.S\.?|US|USA|United States|America|Iran|Israel|Hormuz|Taiwan|NATO|missiles?|drones?|strikes?|attacks?|troops|military)\b/i;
 // Russian domestic business news (marketsAlpha: "🇷🇺 Levan Nazarov… fintech group", "Russia-Kazakhstan trade nears $30 billion", "MGKL climbs 12% amid defaults").
 // Anything about war/Ukraine/peace talks, sanctions, oil/gas, the CBR rate, Putin/Kremlin, the US/China/Europe or markets still counts.
-const RU_CONTEXT = /🇷🇺|\b(Russia|Russian|Russia[’']s|Moscow|MOEX|Sber|Sberbank|Gref|Aeroflot|AFK Sistema|Kazakh\w*|Tokaev|Tokayev|State Duma|Duma)\b/iu;
+const RU_CONTEXT = /🇷🇺|\b(Russia|Russian|Russia[’']s|Moscow|MOEX|Sber|Sberbank|Gref|Aeroflot|AFK Sistema|rubles|roubles|Kazakh\w*|Tokaev|Tokayev|State Duma|Duma)\b/iu;
 const RU_KEEP = /\b(war|attack\w*|strikes?|drones?|missiles?|nuclear|weapons?|NATO|Ukrain\w*|Zelensk\w*|Kyiv|Belarus|peace|ceasefire|truce|negotiat\w*|talks|troops|military|army|sanction\w*|tariffs?|oil|gas|diesel|gasoline|fuel|crude|LNG|refiner\w*|pipelines?|energy|OPEC|grain|wheat|fertili[sz]ers?|ruble|rouble|key rate|rate decision|central bank|CBR|Nabiullina|Putin|Kremlin|Peskov|Lavrov|Medvedev|Trump|Witkoff|Rubio|Vance|U\.S\.?|US|USA|United States|America\w*|Washington|China|Chinese|Xi|Iran|India|Europe\w*|EU|gold|bitcoin|BTC|crypto|Lukoil|Rosneft|Gazprom|Novatek|Transneft|escalat\w*|threat\w*|retaliat\w*|respon\w*|warn\w*|border|invad\w*|security|defen[cs]e|diplomat\w*|embass\w*|spy|spies|cyber\w*|hack\w*|Moldova|Baltic\w*|Poland|Polish|Finland|German\w*|Britain|UK|France|French|Japan)\b/i;
 // Sberbank CEO "German Gref" is not Germany (26 Nov: "German Gref frequently visits Astana…" passed as if it had a Germany angle)
-export function russiaLocal(title: string) { title = title.replace(/\bGerman(?=\s+Gref\b)/gi, "Herman"); return RU_CONTEXT.test(title) && !RU_KEEP.test(title) && !MOVERS.test(title) && !MAG7.test(title) && !FOREIGN_LEADER.test(title); }
+// a Russian company's bond default ("📈🇷🇺 MGKL rises by 2%. …fifth actual default", 27 Nov, went out as HIGH ALERT) is local news;
+// "Russia defaults on its foreign debt" / sovereign or Eurobond defaults still count
+const RU_SOVEREIGN_DEFAULT = /\b(Russia|Russia[’']s|sovereign|government|Eurobonds?|foreign debt|Minfin|Finance Ministry)\b[^.]{0,30}\bdefault|\bdefault\w*\b[^.]{0,30}\b(sovereign|Eurobonds?|foreign debt|OFZ)\b/i;
+const noCompanyDefault = (t: string) => RU_SOVEREIGN_DEFAULT.test(t) ? t : t.replace(/\bdefault(?:s|ed)?\b/gi, "nonpayment");
+export function russiaLocal(title: string) { title = title.replace(/\bGerman(?=\s+Gref\b)/gi, "Herman"); if (RU_SOVEREIGN_DEFAULT.test(title)) return false; title = noCompanyDefault(title); return RU_CONTEXT.test(title) && !RU_KEEP.test(title) && !MOVERS.test(title) && !MAG7.test(title) && !FOREIGN_LEADER.test(title); }
 // weekly natural-gas storage ("US Natural Gas Supplies Fall 24 BCF") is routine data, never a HIGH ALERT on a channel's 🚨 alone
 const ROUTINE_ALERT = /\b(BCF|natural gas (?:storage|supplies|inventor\w*|stocks))\b/i;
 // crypto positioning commentary ("Large cluster of BTC short positions sits between $61,000 and $65,000") is not a HIGH ALERT;
 // actual liquidations ("$1B of BTC shorts liquidated") and price moves still are
-const POSITIONING_ALERT = /\b(?:clusters? of|wall of)\b[^.]{0,40}\b(?:short|long)s?\b|\b(?:short|long) positions? (?:sits?|sitting|stacked|clustered|building)\b|\bliquidation (?:map|heatmap|levels?|clusters?)\b/i;
+const POSITIONING_ALERT = /\b(?:clusters? of|wall of)\b[^.]{0,40}\b(?:short|long)s?\b|\b(?:short|long) positions? (?:sits?|sitting|stacked|clusters?|clustered|building)\b|\bliquidation (?:map|heatmap|levels?|clusters?)\b/i;
 // a leaders' meeting announced ("Trump, Rutte Meet on Ukraine War, Iran Conflict") is not a HIGH ALERT by itself — what they decide is;
 // Fed/FOMC/OPEC meetings and anything matching HIGH_ALERT_RE (strikes, tariffs, rate moves…) still alert
 const MEETING_ONLY = /\b(meet|meets|meeting|to meet|hold talks)\b/i;
@@ -245,6 +249,9 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
   // bank/broker calls on a FOREIGN central bank ("BMO expects Bank of Canada to hike", "Nomura: We see the BOC to hike") — Fed calls stay
   if (!highAlert && BROKER_CALL.test(title) && FOREIGN_CB_ANY.test(title) && !FOREIGN_CB.test(title) && !/\b(Fed|FOMC|Powell)\b/.test(title)) return "foreign CB broker call";
   if (!highAlert) {
+    // crypto positioning / liquidation-map commentary ("Large cluster of BTC short positions sits between $61,000 and $65,000", 26 + 27 Nov);
+    // actual liquidations ("$1B of BTC shorts liquidated") and price moves still pass
+    if (POSITIONING_ALERT.test(title) && !/\bliquidat(?:ed|ions? of)\b/i.test(title)) return "positioning commentary";
     // Peru ministry growth/deficit forecasts (4× in one night) — no impact on US markets
     if (/\bPeru(vian)?\b|\bPeru[’']s\b/i.test(title) && /\b(growth|deficit|GDP|forecast|outlook|projection)\b/i.test(title)) return "minor EM forecast";
     // China coke / coking coal futures moves (4× in one night)
@@ -347,7 +354,7 @@ export function classify(it: Item): Classified {
   let kind: Kind = "news";
   if (/\bEPS\b|\bRevenue\b|\bearnings\b|\bguidance\b|Q[1-4] (?:results|earnings|sales)/i.test(full) && /\$[A-Z]{1,5}\b|\bEPS\b/.test(full)) kind = "earnings";
   else if (/\bauction\b|bid[- ]to[- ]cover/i.test(full)) kind = "auction";
-  else if (/\bActual\b/i.test(full) || (/\bForecast\b/i.test(full) && /\bPrevious\b/i.test(full))) kind = "economic";
+  else if (/\bActual\b(?!\s+(?:defaults?|default\w*|[a-z]{3,}))/i.test(full) || (/\bForecast\b/i.test(full) && /\bPrevious\b/i.test(full))) kind = "economic";
   // a Russian company's "defaults" (MGKL) still posts, but not as a HIGH ALERT
   // foreign CB meeting accounts ("ECB officials: Transmission of rate hikes is working smoothly", 26 Nov) matched "rate hike" — commentary, no HIGH ALERT;
   // an actual decision / emergency move still alerts
@@ -738,13 +745,14 @@ export function tidyHeadline(h: string) {
 }
 // "According to CNBC's sources, an unusually…" -> "An unusually…"
 export function dropInlineSource(line: string) {
-  let s = line.replace(/^(?:according to|citing|per)\s+[^,]{1,50},\s*/i, "").replace(/,?\s*(?:according to|citing)\s+[^,.]{1,50}(?=[,.]|$)/gi, "");
+  let s = line.replace(/^([^\p{L}\p{N}]*?)(?:according to|citing|per)\s+[^,]{1,50},\s*(\p{L})/iu, (_, pre, c) => pre + c.toUpperCase()).replace(/,?\s*(?:according to|citing)\s+[^,.]{1,50}(?=[,.]|$)/gi, "");
   return s ? s[0].toUpperCase() + s.slice(1) : s;
 }
 // headline variant of dropInlineSource for the original-wording fallback (27 Nov: "🌾 Russia has emerged as a major exporter of grain,
 // causing significant harm to France, according to …"): needs the comma so "Talks going according to plan" stays
 export function dropTitleSource(line: string) {
-  let s = line.replace(/^(?:according to|citing)\s+[^,]{1,50},\s*/i, "").replace(/,\s*(?:according to|citing)\s+[^,.]{1,50}(?=[,.]|$)/gi, "");
+  // a leading emoji ("🛢 According to Energy Aspects, oil stockpiling…", 27 Nov) hid the source from the ^ anchor
+  let s = line.replace(/^([^\p{L}\p{N}]*?)(?:according to|citing)\s+[^,]{1,50},\s*(\p{L})/iu, (_, pre, c) => pre + c.toUpperCase()).replace(/,\s*(?:according to|citing)\s+[^,.]{1,50}(?=[,.]|$)/gi, "");
   return s ? s[0].toUpperCase() + s.slice(1) : line;
 }
 // a channel post that stops mid-word ("Vance on N") or is just a couple of characters

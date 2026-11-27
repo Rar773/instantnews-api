@@ -247,4 +247,16 @@ for (const t of ["Saudi Arabia issues warning of potential threat in Abha city",
   if (m.dropInlineSource("📈 According to CNBC's sources, an unusually large order") !== "📈 An unusually large order") { bad++; console.log("FAIL emoji inline source"); }
   for (const t of ["🛢 Oil rises, going according to plan", "📧 Contact press@example.com for details"]) if (m.dropTitleSource(t) !== t) { bad++; console.log("FAIL emoji source too wide |", t); }
 }
+// 27 Nov (13:35): foreign CB rate talk and on-chain ratios are no HIGH ALERT; decisions, emergency moves and Fed lines still are; Cryptorank ranking reports skipped
+{
+  const T = Date.now() + 1e11;
+  for (const t of ["IMF says RBA should prepare for more rate hikes", "⚠️🇪🇺 Dolenc from the European Central Bank (ECB) stated that two interest rate hikes have not been enough to tame inflation", "ECB's Dolenc: Two hikes to date aren't enough to tame inflation", "BTC 7-Day Profit/Loss Ratio Drops to 0.825"])
+    if (m.alertWorthy(t) || m.classify(it(t)).highAlert) { bad++; console.log("FAIL should not alert |", t); }
+  for (const t of ["BoJ raises rates to 1%, first hike in a year", "ECB rate decision: hikes by 25 bps", "RBA emergency rate cut", "Fed's Waller: rate cut in December is likely", "Bank of Japan intervention: yen jumps 3%", "Bitcoin plunges 10% below $60,000", "Iran fires missiles at US base"])
+    if (!m.alertWorthy(t)) { bad++; console.log("FAIL should alert |", t); }
+  if (!m.classify(it("Fed's Waller: rate cut in December is likely")).highAlert) { bad++; console.log("FAIL Fed rate cut highAlert"); }
+  for (const t of ["IMF says RBA should prepare for more rate hikes", "ECB's Dolenc: Two hikes to date aren't enough to tame inflation"]) if (m.classify(it(t)).skip || m.noiseReason(t, false, T)) { bad++; console.log("FAIL CB talk should still post |", t); }
+  for (const t of ["✨ Cryptorank has released a report highlighting the leading networks by trading volume of", "✨ Cryptorank has released a report detailing the largest tokens by growth and decline over"]) if (m.noiseReason(t, false, T) !== "crypto ranking report") { bad++; console.log("FAIL cryptorank |", t); }
+  for (const t of ["Cryptorank: exchange hack drains $200 million", "Bitcoin ETF inflows top $1 billion"]) if (m.noiseReason(t, false, T + 1e9)) { bad++; console.log("FAIL cryptorank too wide |", t); }
+}
 console.log(bad ? `${bad} failures` : "all filter cases OK"); if (bad) process.exit(1);

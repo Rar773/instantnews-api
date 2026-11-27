@@ -223,7 +223,13 @@ const RU_SOVEREIGN_DEFAULT = /\b(Russia|Russia[’']s|sovereign|government|Eurob
 const noCompanyDefault = (t: string) => RU_SOVEREIGN_DEFAULT.test(t) ? t : t.replace(/\bdefault(?:s|ed)?\b/gi, "nonpayment");
 export function russiaLocal(title: string) { title = title.replace(/\bGerman(?=\s+Gref\b)/gi, "Herman"); if (RU_SOVEREIGN_DEFAULT.test(title)) return false; title = noCompanyDefault(title); return RU_CONTEXT.test(title) && !RU_KEEP.test(title) && !MOVERS.test(title) && !MAG7.test(title) && !FOREIGN_LEADER.test(title); }
 // weekly natural-gas storage ("US Natural Gas Supplies Fall 24 BCF") is routine data, never a HIGH ALERT on a channel's 🚨 alone
-const ROUTINE_ALERT = /\b(BCF|natural gas (?:storage|supplies|inventor\w*|stocks))\b/i;
+// on-chain ratio metrics ("BTC 7-Day Profit/Loss Ratio Drops to 0.825", 27 Nov, went out as HIGH ALERT) are commentary too
+const ROUTINE_ALERT = /\b(BCF|natural gas (?:storage|supplies|inventor\w*|stocks)|profit\/loss ratio|P\/L ratio|SOPR|MVRV|NUPL)\b/i;
+// foreign central-bank rate TALK is not a HIGH ALERT ("IMF says RBA should prepare for more rate hikes", "ECB's Dolenc: two interest rate
+// hikes have not been enough", 27 Nov); an actual decision, emergency/surprise move or intervention, and anything about the Fed/US, still alerts
+const FOREIGN_CB_NAMED = /\b(BoE|BoC|ECB|BoJ|RBA|RBNZ|RBI|SNB|PBoC|Riksbank|Norges ?Bank|Bank of (?:England|Canada|Japan)|European Central Bank|Reserve Bank of (?:Australia|New Zealand|India))\b/i;
+const CB_DECISION = /\b(decision|decides?|decided|emergency|surprise\w*|unexpected\w*|intervention|interven\w*|(?:raises|raised|hikes|hiked|cuts|lowers|lowered|holds|held) (?:its )?(?:key |policy |benchmark |interest )?rates?|basis points?|\d+ ?bps?)\b/i;
+export const foreignCbTalk = (t: string) => FOREIGN_CB_NAMED.test(t) && !CB_DECISION.test(t) && !/\b(Fed|FOMC|Powell|Warsh|U\.S\.?|US|USA|United States|Treasur\w*|dollar|Trump)\b/.test(t);
 // crypto positioning commentary ("Large cluster of BTC short positions sits between $61,000 and $65,000") is not a HIGH ALERT;
 // actual liquidations ("$1B of BTC shorts liquidated") and price moves still are
 const POSITIONING_ALERT = /\b(?:clusters? of|wall of)\b[^.]{0,40}\b(?:short|long)s?\b|\b(?:short|long) positions? (?:sits?|sitting|stacked|clusters?|clustered|building)\b|\bliquidation (?:map|heatmap|levels?|clusters?)\b/i;
@@ -234,6 +240,7 @@ const MEETING_KEEP = /\b(Fed|FOMC|Powell|Warsh|OPEC\+?|ECB|BoJ|rates?|strikes?|s
 // "since the war began" is only a time reference ("Qatar's LNG Exports Hit Highest Level Since US-Iran War Began", 26 Nov) — drop it before the topic check
 const SINCE_WAR = /\bsince (?:the )?[\w\s'’-]{0,30}?\bwar (?:began|started|broke out|erupted)\b/gi;
 export function alertWorthy(title: string) {
+  if (foreignCbTalk(title)) return false;
   if (HIGH_ALERT_RE.test(title) && !russiaLocal(title)) return true;
   title = title.replace(SINCE_WAR, " ");
   if (russiaLocal(title) || ROUTINE_ALERT.test(title)) return false;
@@ -252,6 +259,8 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
     // crypto positioning / liquidation-map commentary ("Large cluster of BTC short positions sits between $61,000 and $65,000", 26 + 27 Nov);
     // actual liquidations ("$1B of BTC shorts liquidated") and price moves still pass
     if (POSITIONING_ALERT.test(title) && !/\bliquidat(?:ed|ions? of)\b/i.test(title)) return "positioning commentary";
+    // Cryptorank "top networks / tokens by volume/growth" ranking reports (2× on 27 Nov) — exchange hacks, listings, price moves still pass
+    if (/\bCryptorank\b/i.test(title) && /\b(report\w*|rankings?|ranked|leading|top|largest)\b/i.test(title) && !/\b(hack\w*|exploit\w*|liquidat\w*|crash\w*|plunge\w*|surge\w*)\b/i.test(title)) return "crypto ranking report";
     // Peru ministry growth/deficit forecasts (4× in one night) — no impact on US markets
     if (/\bPeru(vian)?\b|\bPeru[’']s\b/i.test(title) && /\b(growth|deficit|GDP|forecast|outlook|projection)\b/i.test(title)) return "minor EM forecast";
     // China coke / coking coal futures moves (4× in one night)
@@ -359,7 +368,7 @@ export function classify(it: Item): Classified {
   // foreign CB meeting accounts ("ECB officials: Transmission of rate hikes is working smoothly", 26 Nov) matched "rate hike" — commentary, no HIGH ALERT;
   // an actual decision / emergency move still alerts
   const cbAccounts = FOREIGN_CB.test(t) && /^[^:]{0,40}\b(officials|members|policymakers|minutes|accounts)\b[^:]{0,20}:/i.test(t) && !/\b(emergency|decision|decides?|raises rates|cuts rates|hikes rates)\b/i.test(t);
-  return { skip: false, kind, highAlert: HIGH_ALERT_RE.test(t) && !russiaLocal(t) && !cbAccounts };
+  return { skip: false, kind, highAlert: HIGH_ALERT_RE.test(t) && !russiaLocal(t) && !cbAccounts && !foreignCbTalk(t) };
 }
 
 // ---------------------------------------------------------------- Claude

@@ -271,6 +271,9 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
     if (/\bPutin\b/i.test(title) && /\b(Q&A|Q ?& ?A|Direct Line|questions?|press conference|phone-in)\b/i.test(title) && /\b(schedul\w*|to be (?:held|accepted)|accepted|submit\w*|chatbot|VK|Odnoklassniki|will hold|to hold|date)\b/i.test(title) && !RU_KEEP.test(title.replace(/\b(Putin|Kremlin)\b/gi, ""))) return "Putin Q&A logistics";
     // "WH Sr. Adviser Hassett's interview on Fox Business ends." — end of a TV interview says nothing; Fed/Powell lines stay
     if (/\binterview\b/i.test(title) && /\b(ends|ended|concludes|concluded|is over|wraps up)\b/i.test(title) && !/\b(Fed|FOMC|Powell)\b/i.test(title)) return "interview ends";
+    // EU seven-year (MFF) budget haggling ("🇪🇺 European leaders have failed to reach an agreement on the seven-year budget", 27 Nov) — leader
+    // lines on it were already cut as "foreign budget talk"; lines with the US, tariffs, Ukraine, defence or a market mover still pass
+    if (/\b(EU|E\.U\.|European|Brussels)\b|🇪🇺/u.test(title) && /\b(seven[- ]year|7[- ]year|long[- ]term|multiannual|MFF)\b[^.]{0,40}\bbudget|\bbudget\b[^.]{0,30}\b(2028|MFF|seven[- ]year)\b/i.test(title) && !MOVERS.test(title) && !/\b(U\.S\.?|US|USA|tariffs?|Ukraine|defen[cs]e|Trump)\b/.test(title)) return "EU long-term budget";
     // Fitch notes on foreign issuers (bank notes, regional outlooks); US/Treasury ratings and down/upgrades stay
     if (/\bFitch\b/i.test(title) && !/\b(U\.?S\.?|United States|America|Treasury)\b/i.test(title) && !/\b(downgrad|upgrad|default|cuts?\b|negative|watch)/i.test(title)) return "foreign rating note";
   }
@@ -738,6 +741,12 @@ export function dropInlineSource(line: string) {
   let s = line.replace(/^(?:according to|citing|per)\s+[^,]{1,50},\s*/i, "").replace(/,?\s*(?:according to|citing)\s+[^,.]{1,50}(?=[,.]|$)/gi, "");
   return s ? s[0].toUpperCase() + s.slice(1) : s;
 }
+// headline variant of dropInlineSource for the original-wording fallback (27 Nov: "🌾 Russia has emerged as a major exporter of grain,
+// causing significant harm to France, according to …"): needs the comma so "Talks going according to plan" stays
+export function dropTitleSource(line: string) {
+  let s = line.replace(/^(?:according to|citing)\s+[^,]{1,50},\s*/i, "").replace(/,\s*(?:according to|citing)\s+[^,.]{1,50}(?=[,.]|$)/gi, "");
+  return s ? s[0].toUpperCase() + s.slice(1) : line;
+}
 // a channel post that stops mid-word ("Vance on N") or is just a couple of characters
 export function isCutOff(title: string) {
   const t = title.replace(/\$[A-Z]+/g, "").trim();
@@ -769,7 +778,7 @@ async function handleItem(it: Item, opts: ItemOpts = {}) {
     // a rewrite that shrank to a stub ("Russia" from a longer post, 26 Nov 06:01) is rejected: keep the original wording instead
     if (rw?.title && !rewriteTooShort(it.title, it.content, rw.title, rw.content)) it = { ...it, title: rw.title, content: rw.content };
     // rewrite failed or was rejected (numbers changed): still drop "- Reuters", "per WSJ"… from the original wording
-    else it = { ...it, title: tidyHeadline(stripAttribution(it.title)), content: it.content.split("\n").map((l) => dropInlineSource(stripAttribution(l))).join("\n").trim() };
+    else it = { ...it, title: tidyHeadline(dropTitleSource(stripAttribution(it.title))), content: it.content.split("\n").map((l) => dropInlineSource(stripAttribution(l))).join("\n").trim() };
   }
   // last check: never post a one-word stub ("Russia") from a channel
   if (via.startsWith("tg:") && c.kind === "news" && !it.content && isCutOff(it.title)) { stats.skipped++; return log("skip incomplete |", it.title); }

@@ -219,4 +219,14 @@ for (const t of ["Putin: AI drones will be used in Ukraine war", "Putin says US 
 // 27 Nov (01:40): Tokyo CPI is Japanese data; Saudi all-clear notices are noise. Tokyo geopolitics, the threat warning and US CPI still pass
 for (const t of ["Tokyo Core CPI YoY Actual 2.9% (Forecast 2.9%, Previous 2.6%)", "Tokyo CPI Overall Actual 2.8% (Forecast 3.1%, Previous 2.8%)", "Saudi civil defence: danger has passed in Abha city"]) if (!m.classify(it(t)).skip) { bad++; console.log("FAIL not skipped |", t); }
 for (const t of ["Saudi Arabia issues warning of potential threat in Abha city", "Tokyo says China fired missiles near Japanese waters", "US CPI YoY Actual 2.9% (Forecast 2.9%, Previous 2.6%)", "BoJ rate decision: Tokyo raises rates to 1%"]) if (m.classify(it(t)).skip) { bad++; console.log("FAIL wrongly skipped |", t); }
+// 27 Nov (05:40): EU seven-year budget haggling is noise; EU budget lines on Ukraine/defence/US, EU tariffs still pass.
+// Fallback headlines lose ", according to …" but "according to plan" without a comma stays
+{
+  const T = Date.now() + 8e10;
+  if (m.noiseReason("🇪🇺 European leaders have failed to reach an agreement on the seven-year budget. There will be another summit", false, T) !== "EU long-term budget") { bad++; console.log("FAIL EU MFF budget"); }
+  for (const t of ["EU long-term budget to fund Ukraine aid of €50 billion", "EU leaders agree seven-year budget with bigger defence spending", "EU imposes tariffs on US goods", "EU budget deficit rules loosened", "ECB raises rates; EU budget talks continue"]) if (m.noiseReason(t, false, T + 1e9)) { bad++; console.log("FAIL EU budget too wide |", t); }
+  if (m.dropTitleSource("🌾 Russia has emerged as a major exporter of grain, causing significant harm to France, according to Le Figaro") !== "🌾 Russia has emerged as a major exporter of grain, causing significant harm to France") { bad++; console.log("FAIL title source |", m.dropTitleSource("🌾 Russia has emerged as a major exporter of grain, causing significant harm to France, according to Le Figaro")); }
+  if (m.dropTitleSource("According to the Kremlin, talks with the US will resume") !== "Talks with the US will resume") { bad++; console.log("FAIL title source lead"); }
+  for (const t of ["Iran talks going according to plan, says Araghchi", "Contact press@example.com for details"]) if (m.dropTitleSource(t) !== t) { bad++; console.log("FAIL title source too wide |", t); }
+}
 console.log(bad ? `${bad} failures` : "all filter cases OK"); if (bad) process.exit(1);

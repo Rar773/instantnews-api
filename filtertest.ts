@@ -279,4 +279,12 @@ for (const t of ["Saudi Arabia issues warning of potential threat in Abha city",
   for (const [t, src, min] of [["S&P cuts Italy outlook to negative", "feed", 7], ["S&P 500 closes up 1.2%, Nasdaq up 2%", "tg:WalterBloomberg", 8], ["S&P 500 futures fall 0.5%", "feed", 9], ["S&P cuts Belgium outlook to negative", "tg:FirstSquawk", 10], ["France Fin. Min. Lescure: S&P says it is urgent to secure the budget.", "feed", 11], ["Moody's cuts France outlook to negative", "tg:FirstSquawk", 100]] as const)
     if (m.isDuplicateStory(t, src, T + min * 60_000)) { bad++; console.log("FAIL sandp too wide |", t); }
 }
+// 28 Nov (09:40): Trump personal/campaign politics (2× marketsAlpha in 3 min) — Trump on Fed successor, tariffs, war still post
+{
+  const T = Date.now() + 4e11;
+  for (const t of ["Donald Trump plans to maintain suspense around his successor for as long as possible.", "Former President Donald Trump is urging his supporters to have faith in him as he campaigns across the country"])
+    if (m.noiseReason(t, false, T) !== "Trump politics") { bad++; console.log("FAIL Trump politics |", m.noiseReason(t, false, T), "|", t); }
+  for (const t of ["Trump to name Powell successor at the Fed next week", "Trump tells supporters tariffs on China will rise to 60%", "Trump campaign pledges tax cuts on tips", "Trump says Iran war victory within reach", "Trump: stocks will hit record highs", "Trump successor pick for Treasury to be announced"])
+    if (m.noiseReason(t, false, T + 5e9)) { bad++; console.log("FAIL Trump too wide |", m.noiseReason(t, false, T + 5e9), "|", t); }
+}
 console.log(bad ? `${bad} failures` : "all filter cases OK"); if (bad) process.exit(1);

@@ -275,6 +275,9 @@ export function noiseReason(title: string, highAlert: boolean, now = Date.now())
     if (/\bOfcom\b/i.test(title) && /\b(seeks? views|consult\w*|call for evidence)\b/i.test(title) && !MAG7.test(title) && !/\b(fines?d?|probe|investigat\w*|Musk|TikTok)\b/i.test(title)) return "UK regulator consultation";
     // QatarEnergy MoUs / partnership talks (2×) — production cuts, LNG force majeure or outages still pass
     if (/\bQatar ?Energy\b/i.test(title) && /\b(MoUs?|memorandum|partners?|partnership|explore|joint projects?|ties)\b/i.test(title)) return "energy MoU";
+    // Trump personal/campaign politics with no market angle ("Trump plans to maintain suspense around his successor…",
+    // "Trump is urging his supporters to have faith in him as he campaigns…", 2× in 3 min on 28 Nov); policy, Fed, tariffs, war still pass
+    if (/\bTrump\b/.test(title) && /\b(successors?|supporters|campaign(?:s|ing|ed)?|approval ratings?|third term|faith in him)\b/i.test(title) && !MOVERS.test(title) && !HIGH_ALERT_RE.test(title) && !MAG7.test(title) && !/\b(Fed|FOMC|Powell|rates?|tariffs?|trade|tax\w*|oil|crude|Iran|China|Russia|Ukraine|war|sanctions?|stocks?|markets?|crypto|bitcoin|dollar|econom\w*|inflation|deal|chips?|Treasury|SEC|secretary|chair\w*|nominee|cabinet)\b/i.test(title)) return "Trump politics";
     // Russia's weekly/monthly inflation prints — no impact on US markets; rate decisions, oil/gas, sanctions still pass
     if (/\bRussia(n|[’']s)?\b/i.test(title) && /\b(inflation|CPI|consumer prices)\b/i.test(title) && !MOVERS.test(title) && !/\b(oil|gas|crude|ruble|rouble|rate decision|key rate)\b/i.test(title)) return "Russia inflation";
     // Russian domestic business/trade news with no war, sanctions, energy, CBR or US/China angle (3× in one evening)

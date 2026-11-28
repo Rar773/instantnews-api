@@ -662,17 +662,25 @@ const stats = { started: new Date().toISOString(), polls: 0, http429: 0, lastPol
 
 // fuzzy duplicate check across all sources (FJ RSS + Telegram channels): same story, different wording
 const STOP = new Set("the a an and or of to in on for at by with from as is are was were be been it its this that says said say will would after over amid into than per via has have had not no new just breaking report reports reported according source sources".split(" "));
-const recent: { tokens: Set<string>; ts: number; src: string; data?: boolean; tickers?: Set<string> }[] = [];
+const recent: { tokens: Set<string>; ts: number; src: string; data?: boolean; tickers?: Set<string>; agencies?: string[] }[] = [];
 // plural "s" dropped so "ratings"/"rating", "shares"/"share" match (S&P–Nvidia rating story went out twice)
 const stem = (w: string) => (w.length > 4 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
-const toks = (s: string) => new Set(norm(s).split(" ").filter((w) => w.length > 2 && !STOP.has(w)).map(stem));
+// "S&P" as a rating agency (not "S&P 500"/"S&P Global") kept as one word: "S&P cuts France outlook" went out 4x on 27 Nov
+// because "s&p" split into 1-letter bits and the versions shared only 3 words
+const toks = (s: string) => new Set(norm(s.replace(/\bS&P\b(?!\s*(?:500|Global|futures|index))/gi, " sandp ")).split(" ").filter((w) => w.length > 2 && !STOP.has(w)).map(stem));
 // Only compares across DIFFERENT sources: items from one source are already de-duplicated by id, and similar-looking
 // lines from the same source are usually separate facts (CPI MoM vs CPI YoY, initial vs continuing claims, two Fed speakers).
 const OUTLET_WORDS = new Set("reuters rtrs bloomberg bbg wsj cnbc axios nyt politico semafor tass ria irib fars tasnim xinhua nikkei kyodo yonhap nbc cbs abc cnn fox bbc mni barron interview exclusive".split(" "));
 const COMPANY_TICKER: [string, string][] = [["nvidia", "nvda"], ["apple", "aapl"], ["microsoft", "msft"], ["tesla", "tsla"], ["amazon", "amzn"], ["alphabet", "googl"], ["google", "googl"], ["meta", "meta"], ["netflix", "nflx"], ["broadcom", "avgo"], ["intel", "intc"], ["anthropic", "ant"], ["openai", "openai"]];
 const tickersOf = (s: string) => new Set((s.match(/\$[A-Z]{1,6}\b/g) || []).map((x) => x.toUpperCase()));
+const RATING_AGENCY = ["sandp", "moody", "fitch"];
+// words every rating line has; a shared subject (country/company) must be on top of these
+const RATING_WORDS = new Set("outlook negative positive stable rating cut cuts lower lowers raise raises affirm affirms affirmed confirmed revise revises revised changed downgrade downgrades upgrade upgrades watch creditwatch".split(" "));
 export function isDuplicateStory(text: string, src = "feed", now = Date.now()) {
-  const t = new Set([...toks(text)].filter((w) => !OUTLET_WORDS.has(w) && !OUTLET_WORDS.has(w + "s"))); // "- CNBC" on one version must not hide the match
+  const all = toks(text);
+  const ag = RATING_AGENCY.filter((a) => all.has(a));
+  // agency names stay out of the word overlap so "S&P cuts Belgium…" / "S&P cuts France…" do not look alike
+  const t = new Set([...all].filter((w) => !OUTLET_WORDS.has(w) && !OUTLET_WORDS.has(w + "s") && !RATING_AGENCY.includes(w))); // "- CNBC" on one version must not hide the match
   for (const [name, tick] of COMPANY_TICKER) if (t.has(name)) t.add(tick); // "Nvidia" in one version, "$NVDA" in the other
   const tk = tickersOf(text);
   const isData = /\bActual\b/.test(text);
@@ -687,10 +695,13 @@ export function isDuplicateStory(text: string, src = "feed", now = Date.now()) {
     if (r.src !== src && overlap >= 0.6 && inter >= 4 && now - r.ts < 10 * 60_000) return true;
     // same company ($TICKER on both) from another source within 30 min, clearly the same story told in other words
     if (r.src !== src && tk.size && [...tk].some((x) => r.tickers?.has(x)) && overlap >= 0.5 && inter >= 4 && now - r.ts < 30 * 60_000) return true;
+    // same rating agency on both within 30 min, any source: one rating action comes as several feed lines
+    // ("S&P: France outlook changed to negative" / "S&P revises France outlook to negative, affirms A+")
+    if (ag.some((a) => r.agencies?.includes(a)) && overlap >= 0.5 && inter >= 3 && [...t].some((w) => r.tokens.has(w) && !RATING_WORDS.has(w)) && now - r.ts < 30 * 60_000) return true;
     // same source repeating itself (e.g. 6 WSJ tariff lines in 3 minutes) — never for data lines like CPI MoM/YoY
     if (r.src === src && !isData && !r.data && overlap >= 0.8 && inter >= 4 && now - r.ts < 15 * 60_000) return true;
   }
-  recent.push({ tokens: t, ts: now, src, data: isData, tickers: tk });
+  recent.push({ tokens: t, ts: now, src, data: isData, tickers: tk, agencies: ag });
   return false;
 }
 

@@ -270,4 +270,13 @@ for (const t of ["Saudi Arabia issues warning of potential threat in Abha city",
     "Putin arrives in Beijing for talks with Xi", "Putin arrives in Alaska for summit with Trump", "Putin attends meeting on Ukraine ceasefire proposal", "Putin: Russia will respond to any NATO attack", "Gazprom halts gas flows to Europe"])
     if (m.noiseReason(t, false, T + 3e9)) { bad++; console.log("FAIL too wide |", t); }
 }
+// 28 Nov (01:40): S&P (rating agency) is one dedup word — "S&P cuts France outlook" went out 4x; S&P 500 moves and other ratings still post
+{
+  const T = Date.now() + 3e11;
+  if (m.isDuplicateStory("S&P: France Outlook changed from Stable to Negative.", "feed", T)) { bad++; console.log("FAIL sandp first"); }
+  for (const [t, src, min] of [["S&P Cuts France's Outlook to Negative", "tg:marketsAlpha", 1], ["S&P revises France outlook to negative, affirms A+/A-1 ratings", "feed", 4], ["S&P: France outlook cut to negative on budget consolidation risks; 'A+/A-1' ratings confirmed", "feed", 5]] as const)
+    if (!m.isDuplicateStory(t, src, T + min * 60_000)) { bad++; console.log("FAIL sandp dup |", t); }
+  for (const [t, src, min] of [["S&P cuts Italy outlook to negative", "feed", 7], ["S&P 500 closes up 1.2%, Nasdaq up 2%", "tg:WalterBloomberg", 8], ["S&P 500 futures fall 0.5%", "feed", 9], ["S&P cuts Belgium outlook to negative", "tg:FirstSquawk", 10], ["France Fin. Min. Lescure: S&P says it is urgent to secure the budget.", "feed", 11], ["Moody's cuts France outlook to negative", "tg:FirstSquawk", 100]] as const)
+    if (m.isDuplicateStory(t, src, T + min * 60_000)) { bad++; console.log("FAIL sandp too wide |", t); }
+}
 console.log(bad ? `${bad} failures` : "all filter cases OK"); if (bad) process.exit(1);
